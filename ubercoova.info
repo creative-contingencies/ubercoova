@@ -1,0 +1,9 @@
+; $Id$
+name = UberCoova
+description = Glue module that allow Ubercart to be used to purchase bandwidth credit for Coova on FreeRADIUS.
+
+core = 6.x
+version = 6.x-0.1
+
+dependencies[] = uc_product
+dependencies[] = number
