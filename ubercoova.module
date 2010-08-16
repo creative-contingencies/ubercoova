@@ -1,0 +1,24 @@
+<?php
+// $Id$
+
+/**
+ * Implementation of hook_user()
+ *
+ * Verify user login against FreeRADIUS MySQL backend
+ * and update in Drupal if required.
+ *
+ * Populate an account tab with usage/remaining info.
+ */
+function ubercoova_user($op, &$edit, &$account, $category = NULL) {
+
+}
+
+/**
+ * Implementation of hook_uc_checkout_complete()
+ *
+ * When product purchase complete, transpose purchased
+ * quota to FreeRADIUS MySQL backend.
+ */
+function ubercoova_uc_checkout_complete($order, $account) {
+
+}
