@@ -2,7 +2,7 @@
 /**
  * Define CCK quota field for use in hook_install()
  */
-function _ubercoova_export()
+function _ubercoova_export() {
   return
     array (
       'label' => 'Quota',
@@ -11,7 +11,7 @@ function _ubercoova_export()
       'widget_type' => 'number',
       'change' => 'Change basic information',
       'weight' => '31',
-      'description' => 'Enter the quota (in megabytes) that should be assigned to the user when the buy this product.',
+      'description' => 'Enter the quota (in megabytes) that should be assigned to the user when the buys this product. It will be added to FreeRADIUS in bytes using the factor 1024&times;1024.',
       'default_value' => 
       array (
         0 => 
