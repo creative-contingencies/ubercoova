@@ -1,0 +1,14 @@
+<?php
+/**
+ * Implementation of hook_install()
+ *
+ * Add a quota field to the product node type.
+ */
+function ubercoova_install() {
+  module_load_include('inc', 'content', 'includes/content.crud');
+  module_load_include('inc', 'ubercoova', 'includes/ubercoova.cck');
+
+  $field = _ubercoova_export();
+  $field['type_name'] = 'product';
+  content_field_instance_create($field);
+}
