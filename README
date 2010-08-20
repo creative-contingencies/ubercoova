@@ -1,1 +1,2 @@
-Ubercart/Coova/FreeRadius glue that doesn't require a CoovaEWT, CoovaRADIUS Hotspot setup.
+Ubercart/Coova/FreeRadius glue that doesn't require a CoovaEWT, CoovaRADIUS setup, but
+does work with just the Hotspot module and JavaScript controller.

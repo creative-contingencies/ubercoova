@@ -5,5 +5,6 @@ description = Glue module that allow Ubercart to be used to purchase bandwidth c
 core = 6.x
 version = 6.x-0.1
 
+dependencies[] = hotspot
 dependencies[] = uc_product
 dependencies[] = number
