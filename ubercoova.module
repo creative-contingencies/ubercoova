@@ -191,7 +191,8 @@ function ubercoova_uc_checkout_complete($order, $account) {
     $purchased_quota += $order_quota;
   }
 
-  // We have a purchased quota total in GB now. Convert to bytes before adding to radius.
+  // We have a purchased quota total in GB now.
+  // Convert to bytes before adding to radius.
   $purchased_quota *= pow(UBERCOOVA_KILOBYTE, 3);
 
   // Load vars from the default database.
@@ -204,6 +205,9 @@ function ubercoova_uc_checkout_complete($order, $account) {
 
   db_query("UPDATE %s SET value = %d WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $new_quota, $account->name, $attribute);
   db_set_active();
+
+  // Watchdog log it, so if there is fail we can check.
+  watchdog('ubercoova', 'Had !remaining. Bought !purchased. Now has !new quota.', array('!remaining' => format_size($remaining_quota), '!purchased' => format_size($purchased_quota), '!new' => format_size($new_quota)), WATCHDOG_INFO, NULL);
 }
 
 /**
