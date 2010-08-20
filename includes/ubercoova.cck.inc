@@ -11,7 +11,7 @@ function _ubercoova_export() {
       'widget_type' => 'number',
       'change' => 'Change basic information',
       'weight' => '31',
-      'description' => 'Enter the quota (in megabytes) that should be assigned to the user when the buys this product. It will be added to FreeRADIUS in bytes using the factor 1024&times;1024.',
+      'description' => 'Enter the quota (in gigabytes) that should be assigned to the user when the buys this product. It will be added to FreeRADIUS in bytes using the factor 1024&times;1024&times;1024.',
       'default_value' => 
       array (
         0 => 
@@ -27,7 +27,7 @@ function _ubercoova_export() {
       'min' => '0',
       'max' => '',
       'prefix' => '',
-      'suffix' => 'MB',
+      'suffix' => 'GB',
       'allowed_values' => '',
       'op' => 'Save field settings',
       'module' => 'number',
