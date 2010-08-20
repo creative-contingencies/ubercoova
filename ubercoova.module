@@ -155,6 +155,9 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
             '#value' => theme('user_quota', $quota),
           ),
         );
+
+        // There is an orders tab, no need to duplicate this.
+        unset($account->content['orders']);
       }
       break;
   }
@@ -169,7 +172,7 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
  * @param $order
  *   A valid ubercart order object.
  * @param $account
- *   An optional valod $user object.
+ *   An optional valid $user object.
  */
 function ubercoova_uc_checkout_complete($order, $account) {
 
@@ -196,10 +199,10 @@ function ubercoova_uc_checkout_complete($order, $account) {
   $attribute = variable_get('ubercoova_attribute_quota', '');
 
   db_set_active('radius');
-  $remaining_quota = intval(db_result(db_queryd("SELECT value FROM %s WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $account->name, $attribute)));
+  $remaining_quota = intval(db_result(db_query("SELECT value FROM %s WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $account->name, $attribute)));
   $new_quota = $remaining_quota + $purchased_quota;
 
-  db_queryd("UPDATE %s SET value = %d WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $new_quota, $account->name, $attribute);
+  db_query("UPDATE %s SET value = %d WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $new_quota, $account->name, $attribute);
   db_set_active();
 }
 
@@ -223,7 +226,7 @@ function ubercoova_theme() {
  *   A translated themed string.
  */
 function theme_user_quota($quota) {
-  return t('Your remaining quota is @quota', array('@quota' => ubercoova_format_size($quota)));
+  return t('Your remaining quota is @quota.', array('@quota' => ubercoova_format_size($quota)));
 }
 
 /**
