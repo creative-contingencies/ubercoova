@@ -1,5 +1,28 @@
 <?php
-// $Id$
+/**
+ * Implementation of hook_menu()
+ */
+function ubercoova_menu() {
+  $items = array();
+  $items['admin/settings/ubercoova'] = array(
+    'title' => 'UberCoova',
+    'description' => 'Configure settings for the UberCoova module.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('ubercoova_settings'),
+    'access callback' => 'user_access',
+    'access arguments' => array('administer ubercoova'),
+    'file' => 'includes/ubercoova.admin.inc',
+    'type' => MENU_NORMAL_ITEM,
+  );
+  return $items;
+}
+
+/**
+ * Implementation of hook_perm()
+ */
+function ubercoova_perm() {
+  return array('administer ubercoova');
+}
 
 /**
  * Implementation of hook_user()
