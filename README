@@ -1,2 +1,43 @@
-Ubercart/Coova/FreeRadius glue that doesn't require a CoovaEWT, CoovaRADIUS setup, but
-does work with just the Hotspot module and JavaScript controller.
+== WHAT?! ==
+
+This module provides Ubercart/Coova/FreeRadius glue that doesn't require a
+CoovaEWT and CoovaRADIUS setup, but does work with just the Hotspot module
+and JavaScript controller.
+
+
+== INSTALLATION ==
+
+Extract the module to your sites/all/modules directory and visit the modules
+list page to enable it. It will be listed under 'Other'.
+
+Once enabled, a user with 'administer ubercoova' permission can change the
+module configuration on admin/settings/ubercoova.
+
+
+== CONFIGURATION ==
+
+To make use of the ubercoova module, Drupal needs to be able to access
+the FreeRADIUS backend database.
+
+You can configure this database by editing your settings.php file.
+
+Modify the $db_url variable, so that instead of a string it is an array.
+The array should have at least a 'default' key that contains the existing
+url for the Drupal database. First, change:
+
+  $db_url = 'mysqli://username:password@localhost/databasename';
+
+To:
+
+  $db_url = array();
+  $db_url['default'] = 'mysqli://username:password@localhost/drupal';
+
+You can now append the database url for the freeradius database below the
+default url. You should give it the key 'radius'.
+
+  $db_url = array();
+  $db_url['default'] = 'mysqli://username:password@localhost/drupal';
+  $db_url['radius'] = 'mysqli://raduser:radpass@localhost/radius';
+
+The raduser account needs to be able to read from and write to the table
+with account credentials and attributes.
