@@ -1,5 +1,5 @@
 <?php
-define('UBERCOOVA_GIGABYTE', 1024 * 1024 * 1024);
+define('UBERCOOVA_KILOBYTE', 1024);
 
 /**
  * Implementation of hook_menu()
@@ -106,6 +106,9 @@ function ubercoova_user_login_validate($form, &$form_state) {
   }
 }
 
+/**
+ * Submit handler for the user/%/edit form.
+ */
 function ubercoova_profile_form_submit($form, &$form_state) {
   if (isset($form_state['values']['pass']) && $form_state['values']['pass']) {
     // The user name is not present in the form if the user has no
@@ -154,8 +157,6 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
         );
       }
       break;
-    case 'load':
-      break;
   }
 }
 
@@ -164,15 +165,19 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
  *
  * When product purchase complete, transpose purchased
  * quota to FreeRADIUS MySQL backend.
+ *
+ * @param $order
+ *   A valid ubercart order object.
+ * @param $account
+ *   An optional valod $user object.
  */
 function ubercoova_uc_checkout_complete($order, $account) {
 
+  // $account is set only if the user was created as part of the checkout process.
   if (!$account) {
     $account = user_load($order->uid);
   }
 
-  dpm($order);
- 
   // Start with 0 quota.
   $purchased_quota = 0;
 
@@ -184,7 +189,7 @@ function ubercoova_uc_checkout_complete($order, $account) {
   }
 
   // We have a purchased quota total in GB now. Convert to bytes before adding to radius.
-  $purchased_quota *= UBERCOOVA_GIGABYTE;
+  $purchased_quota *= pow(UBERCOOVA_KILOBYTE, 3);
 
   // Load vars from the default database.
   $table = variable_get('ubercoova_table', '');
@@ -211,7 +216,53 @@ function ubercoova_theme() {
 
 /**
  * Theme function to display the quota on the /user/% page.
+ *
+ * @param $quota
+ *   A quota in bytes.
+ * @return
+ *   A translated themed string.
  */
 function theme_user_quota($quota) {
-  return t('Your remaining quota is @quota', array('@quota' => format_size($quota)));
+  return t('Your remaining quota is @quota', array('@quota' => ubercoova_format_size($quota)));
+}
+
+/**
+ * Taken from Drupal 7.x, to handle units larger than MB.
+ *
+ * Generate a string representation for the given byte count.
+ *
+ * @param $size
+ *   A size in bytes.
+ * @param $langcode
+ *   Optional language code to translate to a language other than what is used
+ *   to display the page.
+ * @return
+ *   A translated string representation of the size.
+ */
+function ubercoova_format_size($size, $langcode = NULL) {
+  if ($size < UBERCOOVA_KILOBYTE) {
+    return format_plural($size, '1 byte', '@count bytes', array(), $langcode);
+  }
+  else {
+    $size = $size / UBERCOOVA_KILOBYTE; // Convert bytes to kilobytes.
+    $units = array(
+      t('@size KB', array(), $langcode),
+      t('@size MB', array(), $langcode),
+      t('@size GB', array(), $langcode),
+      t('@size TB', array(), $langcode),
+      t('@size PB', array(), $langcode),
+      t('@size EB', array(), $langcode),
+      t('@size ZB', array(), $langcode),
+      t('@size YB', array(), $langcode),
+    );
+    foreach ($units as $unit) {
+      if (round($size, 2) >= UBERCOOVA_KILOBYTE) {
+        $size = $size / UBERCOOVA_KILOBYTE;
+      }
+      else {
+        break;
+      }
+    }
+    return str_replace('@size', round($size, 2), $unit);
+  }
 }
