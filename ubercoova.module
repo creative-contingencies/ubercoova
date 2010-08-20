@@ -1,4 +1,6 @@
 <?php
+define('UBERCOOVA_GIGABYTE', 1024 * 1024 * 1024);
+
 /**
  * Implementation of hook_menu()
  */
@@ -25,15 +27,136 @@ function ubercoova_perm() {
 }
 
 /**
- * Implementation of hook_user()
+ * Implementation of hook_form_alter()
  *
  * Verify user login against FreeRADIUS MySQL backend
  * and update in Drupal if required.
+ */
+function ubercoova_form_alter(&$form, $form_state, $form_id) {
+  switch ($form_id) {
+    case 'user_login':
+    case 'user_login_block':
+      $form['#validate'] = is_array($form['#validate']) ? $form['#validate'] : array();
+      // Our validate function *MUST* run first.
+      array_unshift($form['#validate'], 'ubercoova_user_login_validate');
+    break;
+
+    case 'user_profile_form':
+      // Hide the email field if the user isn't an administrator.
+      if (!user_access('administer users')) {
+        $form['account']['mail']['#disabled'] = TRUE;
+        $form['account']['mail']['#type'] = 'hidden';
+      }
+      // Append our own submit handler.
+      $form['#submit'] = is_array($form['#submit']) ? $form['#submit'] : array();
+      $form['#submit'][] = 'ubercoova_profile_form_submit';
+      break;
+  }
+
+}
+
+/**
+ * Override the login form validator and check the user against the
+ * freeradius database.
+ */
+function ubercoova_user_login_validate($form, &$form_state) {
+
+  if (isset($form_state['values']['name']) && $form_state['values']['name'] && isset($form_state['values']['pass']) && $form_state['values']['pass']) {
+    // Do not do this for uid 1. Ever.
+    $account = user_load(array('name' => $form_state['values']['name']));
+    if ($account->uid == 1) {
+      return;
+    }
+
+    // Grab some variables we need to query the radius database.
+    $table = variable_get('ubercoova_table', '');
+    $attribute = variable_get('ubercoova_attribute_password', '');
+    $rid = variable_get('ubercoova_rid', 0);
+
+    db_set_active('radius');
+    $row = db_fetch_array(db_query("SELECT username, value FROM %s WHERE LOWER(username) = LOWER('%s') AND attribute = '%s' AND op = '==' AND value = '%s'", $table, $form_state['values']['name'], $attribute, $form_state['values']['pass']));
+    db_set_active();
+
+    if (!empty($row)) {
+      // This means the user exists in radius with the given password.
+      form_set_value($form['name'], $row['username'], $form_state);
+      form_set_value($form['pass'], $row['value'], $form_state);
+
+      // If this username does not exist in the Drupal database, init a
+      // new user and save it. If it does exist, make sure the password
+      // in Drupal is updated to match the radius one, so the auth check
+      // that runs in user.module after this validator will succeed.
+      if ($account->uid == 0) {
+        $user_attributes = array(
+          'name' => $form_state['values']['name'],
+          'pass' => $form_state['values']['pass'],
+          'mail' => $form_state['values']['name'] . '@radius',
+          'roles' => array_filter(array(DRUPAL_AUTHENTICATED_RID, $rid)),
+          'status' => TRUE,
+        );
+        $new_user = user_save(
+          new stdClass(),
+          $user_attributes
+        );
+      }
+      else  {
+        db_query("UPDATE {users} SET pass = MD5('%s') WHERE uid = %d", $form_state['values']['pass'], $account->uid);
+      }
+    }
+  }
+}
+
+function ubercoova_profile_form_submit($form, &$form_state) {
+  if (isset($form_state['values']['pass']) && $form_state['values']['pass']) {
+    // The user name is not present in the form if the user has no
+    // permissions to edit it. In that case, use the current user.
+    if (isset($form_state['values']['name'])) {
+      $name = $form_state['values']['name'];
+    }
+    else {
+      global $user;
+      $name = $user->name;
+    }
+
+    $table = variable_get('ubercoova_table', '');
+    $attribute = variable_get('ubercoova_attribute_password', '');
+
+    db_set_active('radius');
+    db_query("UPDATE %s SET value = '%s' WHERE username = '%s' AND attribute = '%s' AND op = '=='", $table, $form_state['values']['pass'], $name, $attribute);
+    db_set_active();
+  }
+}
+
+/**
+ * Implementation of hook_user()
  *
  * Populate an account tab with usage/remaining info.
  */
 function ubercoova_user($op, &$edit, &$account, $category = NULL) {
+  global $user;
+  switch($op) {
+    case 'view':
+      if ($user->uid && (($user->uid == $account->uid) || user_access('access user profiles'))) {
+        $attribute = variable_get('ubercoova_attribute_quota', '');
+        $table = variable_get('ubercoova_table', '');
+        db_set_active('radius');
+        $quota = db_result(db_query("SELECT value FROM " . $table . " WHERE username = '%s' and attribute = '%s' AND op = ':='", $account->name, $attribute));
+        db_set_active();
 
+        $account->content['quota'] = array(
+          '#type' => 'user_profile_category',
+          '#weight' => -6,
+          '#title' => t('Quota'),
+          'link' => array(
+            '#type' => 'user_profile_item',
+            '#value' => theme('user_quota', $quota),
+          ),
+        );
+      }
+      break;
+    case 'load':
+      break;
+  }
 }
 
 /**
@@ -44,4 +167,51 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
  */
 function ubercoova_uc_checkout_complete($order, $account) {
 
+  if (!$account) {
+    $account = user_load($order->uid);
+  }
+
+  dpm($order);
+ 
+  // Start with 0 quota.
+  $purchased_quota = 0;
+
+  // For each product in this order, add the purchased quota to the running total.
+  foreach ($order->products as $product) {
+    $node = node_load($product->nid);
+    $order_quota = $product->qty * $node->field_ubercoova_quota[0]['value'];
+    $purchased_quota += $order_quota;
+  }
+
+  // We have a purchased quota total in GB now. Convert to bytes before adding to radius.
+  $purchased_quota *= UBERCOOVA_GIGABYTE;
+
+  // Load vars from the default database.
+  $table = variable_get('ubercoova_table', '');
+  $attribute = variable_get('ubercoova_attribute_quota', '');
+
+  db_set_active('radius');
+  $remaining_quota = intval(db_result(db_queryd("SELECT value FROM %s WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $account->name, $attribute)));
+  $new_quota = $remaining_quota + $purchased_quota;
+
+  db_queryd("UPDATE %s SET value = %d WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $new_quota, $account->name, $attribute);
+  db_set_active();
+}
+
+/**
+ * Implementation of hook_theme().
+ */
+function ubercoova_theme() {
+  return array(
+    'user_quota' => array(
+      'arguments' => array($quota => 0),
+    ),
+  );
+}
+
+/**
+ * Theme function to display the quota on the /user/% page.
+ */
+function theme_user_quota($quota) {
+  return t('Your remaining quota is @quota', array('@quota' => format_size($quota)));
 }
