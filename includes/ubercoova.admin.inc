@@ -4,26 +4,33 @@
  */
 function ubercoova_settings() {
 
-  // This whole thing will fail if there is no 'radius' $db_url in settings.php. So check for that first.
+  // This whole thing will fail if there is no 'radius' $db_url in settings.php.
+  // So check for that first.
   global $db_url;
   if (empty($db_url['radius'])) {
     drupal_set_message(t('No $db_url named radius was found in your settings.php file. Please add one.'), 'error');
-    return;
+    $display_help = TRUE;
   }
 
   module_load_include('inc', 'ubercoova', 'help/ubercoova.admin.help');
 
+  // If the radius db_url wasn't found, expand this help section.
   $form = array();
   $form['help'] = array(
     '#type' => 'fieldset',
     '#title' => 'Help',
     '#collapsible' => TRUE,
-    '#collapsed' => TRUE,
+    '#collapsed' => ($display_help) ? FALSE : TRUE,
   );
   $form['help']['ubercoova_help'] = array(
     '#type'  => 'markup',
     '#value' => ubercoova_settings_help(),
   );
+
+  // If the radius db_url wasn't found, display only the help section.
+  if ($display_help) {
+    return system_settings_form($form);
+  }
 
   // Default table, saves us a db_switch later.
   $table = variable_get('ubercoova_table', '');
