@@ -12,3 +12,20 @@ function ubercoova_install() {
   $field['type_name'] = 'product';
   content_field_instance_create($field);
 }
+
+/**
+ * Implementation of hook_uninstall()
+ *
+ * Remove the quota field from the product node type.
+ */
+function ubercoova_uninstall() {
+  module_load_include('inc', 'content', 'includes/content.crud');
+  module_load_include('inc', 'ubercoova', 'includes/ubercoova.cck');
+
+  $field = _ubercoova_export();
+  content_field_instance_delete($field['field_name'], 'product', FALSE);
+
+  // Flush caches
+  content_clear_type_cache(TRUE);
+  menu_rebuild();
+}
