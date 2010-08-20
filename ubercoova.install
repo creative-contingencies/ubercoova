@@ -28,4 +28,19 @@ function ubercoova_uninstall() {
   // Flush caches
   content_clear_type_cache(TRUE);
   menu_rebuild();
+
+  // Remove variables.
+  variable_del('ubercoova_table');
+  variable_del('ubercoova_attribute_password');
+  variable_del('ubercoova_attribute_quota');
+}
+
+/**
+ * Implementation of hook_update_N()
+ *
+ * Remove used var from the database, if it was present.
+ */
+function ubercoova_update_6001() {
+  variable_del('ubercoova_attribute_username');
+  return array(array('success' => TRUE, 'query' => 'Removed unused ubercoova_attribute_username setting from the variables table.'));
 }
