@@ -10,9 +10,6 @@ and JavaScript controller.
 Extract the module to your sites/all/modules directory and visit the modules
 list page to enable it. It will be listed under 'Other'.
 
-Once enabled, a user with 'administer ubercoova' permission can change the
-module configuration on admin/settings/ubercoova.
-
 
 == CONFIGURATION ==
 
@@ -41,3 +38,6 @@ default url. You should give it the key 'radius'.
 
 The raduser account needs to be able to read from and write to the table
 with account credentials and attributes.
+
+Once enabled, a user with 'administer ubercoova' permission can change the
+module configuration on admin/settings/ubercoova.

@@ -1,5 +1,11 @@
 <?php
+
 define('UBERCOOVA_KILOBYTE', 1024);
+
+/**
+ * Load the CA routines.
+ */
+module_load_include('inc', 'ubercoova', 'includes/ubercoova.ca');
 
 /**
  * Implementation of hook_menu()
@@ -161,53 +167,6 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
       }
       break;
   }
-}
-
-/**
- * Implementation of hook_uc_checkout_complete()
- *
- * When product purchase complete, transpose purchased
- * quota to FreeRADIUS MySQL backend.
- *
- * @param $order
- *   A valid ubercart order object.
- * @param $account
- *   An optional valid $user object.
- */
-function ubercoova_uc_checkout_complete($order, $account) {
-
-  // $account is set only if the user was created as part of the checkout process.
-  if (!$account) {
-    $account = user_load($order->uid);
-  }
-
-  // Start with 0 quota.
-  $purchased_quota = 0;
-
-  // For each product in this order, add the purchased quota to the running total.
-  foreach ($order->products as $product) {
-    $node = node_load($product->nid);
-    $order_quota = $product->qty * $node->field_ubercoova_quota[0]['value'];
-    $purchased_quota += $order_quota;
-  }
-
-  // We have a purchased quota total in GB now.
-  // Convert to bytes before adding to radius.
-  $purchased_quota *= pow(UBERCOOVA_KILOBYTE, 3);
-
-  // Load vars from the default database.
-  $table = variable_get('ubercoova_table', '');
-  $attribute = variable_get('ubercoova_attribute_quota', '');
-
-  db_set_active('radius');
-  $remaining_quota = intval(db_result(db_query("SELECT value FROM %s WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $account->name, $attribute)));
-  $new_quota = $remaining_quota + $purchased_quota;
-
-  db_query("UPDATE %s SET value = %d WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $new_quota, $account->name, $attribute);
-  db_set_active();
-
-  // Watchdog log it, so if there is fail we can check.
-  watchdog('ubercoova', 'Had !remaining. Bought !purchased. Now has !new quota.', array('!remaining' => format_size($remaining_quota), '!purchased' => format_size($purchased_quota), '!new' => format_size($new_quota)), WATCHDOG_INFO, NULL);
 }
 
 /**

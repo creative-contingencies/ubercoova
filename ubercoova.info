@@ -7,4 +7,5 @@ version = 6.x-0.1
 
 dependencies[] = hotspot
 dependencies[] = uc_product
+dependencies[] = ca
 dependencies[] = number
