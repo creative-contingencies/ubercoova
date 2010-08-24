@@ -29,7 +29,7 @@ function ubercoova_menu() {
  * Implementation of hook_perm()
  */
 function ubercoova_perm() {
-  return array('administer ubercoova');
+  return array('administer ubercoova', 'edit user quota');
 }
 
 /**
