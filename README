@@ -1,14 +1,28 @@
 == WHAT?! ==
 
-This module provides Ubercart/Coova/FreeRadius glue that doesn't require a
-CoovaEWT and CoovaRADIUS setup, but does work with just the Hotspot module
-and JavaScript controller.
+This module provides Ubercart/Coova/Radius glue that doesn't require a
+CoovaEWT and CoovaRADIUS setup.
+
+
+== LICENSE ==
+
+This code is made available under the GNU GENERAL PUBLIC LICENSE version 2.
+See the COPYING file for details.
+
+
+== PREREQUISITES ==
+
+You need to have a working Coova installation with a radius server that
+uses a MySQL backend. This code was developed for use with FreeRADIUS.
+
+You also need a configured Ubercart installation, to take payments for
+download quota.
 
 
 == INSTALLATION ==
 
 Extract the module to your sites/all/modules directory and visit the modules
-list page to enable it. It will be listed under 'Other'.
+list page to enable it. It will be listed s 'UberCoova' under 'Other'.
 
 
 == CONFIGURATION ==
