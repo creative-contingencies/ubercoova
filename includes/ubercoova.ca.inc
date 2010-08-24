@@ -143,7 +143,7 @@ function ubercoova_action_update_quota($order) {
   $account = user_load($order->uid);
 
   // Start with 0 quota.
-  $purchased = 0;
+  $purchased = (float)0;
 
   // For each product in this order, add the purchased quota to the running total.
   foreach ($order->products as $product) {
@@ -162,10 +162,12 @@ function ubercoova_action_update_quota($order) {
   $attribute = variable_get('ubercoova_attribute_quota', '');
 
   db_set_active('radius');
-  $remaining = intval(db_result(db_query("SELECT value FROM %s WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $account->name, $attribute)));
+  // Need to use floatval() because on 32bit int is limited in range from
+  // negative to positive 2GB. Oops.
+  $remaining = floatval(db_result(db_query("SELECT value FROM %s WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $account->name, $attribute)));
   $quota = $remaining + $purchased;
 
-  db_query("UPDATE %s SET value = %d WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $quota, $account->name, $attribute);
+  db_query("UPDATE %s SET value = %f WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $quota, $account->name, $attribute);
   db_set_active();
 
   // Watchdog log it, so if there is fail we can check.
