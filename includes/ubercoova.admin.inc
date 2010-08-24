@@ -7,8 +7,8 @@ function ubercoova_settings() {
   // This whole thing will fail if there is no 'radius' $db_url in settings.php.
   // So check for that first.
   global $db_url;
-  if (empty($db_url['radius'])) {
-    drupal_set_message(t('No $db_url named radius was found in your settings.php file. Please add one.'), 'error');
+  if (!is_array($db_url) || empty($db_url['radius'])) {
+    drupal_set_message(t('This module requires additional configuration. No $db_url named radius was found in your settings.php file. Please add one.'), 'error');
     $display_help = TRUE;
   }
 
