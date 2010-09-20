@@ -58,7 +58,6 @@ function ubercoova_form_alter(&$form, $form_state, $form_id) {
       $form['#submit'][] = 'ubercoova_profile_form_submit';
       break;
   }
-
 }
 
 /**
@@ -170,6 +169,84 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
 }
 
 /**
+ * Implementation of hook_block()
+ */
+function ubercoova_block($op = 'list', $delta = 0, $edit = array()) {
+  switch ($op) {
+    case 'list':
+      $blocks = array();
+      $blocks[0]['info'] = t('Hotspot login block');
+      return $blocks;
+      
+    case 'view':
+      $block = array();
+      $block['subject'] = 'Internet Login';
+      $block['content'] = drupal_get_form('ubercoova_login_form');
+      return $block;
+  }
+}
+
+/*
+  <td class="tableTabBottom">
+        <div class="usernameRow">
+          <span id="usernameLabel">'.$u.'</span>
+          <input name="username" type="text" id="username" size="10"/>
+          <span id="passwordField"><span id="passwordLabel">'.$p.'</span>
+        <input name="password" type="password" id="password" size="10"/></span>
+        </div>
+        
+        <div class="connectRow">
+          <input id="connectButton" type="submit" value="Connect" onClick="connect();"/><span id="logonMessag
+*/
+
+/**
+ * Return a login form that uses the hotspot javascript guff.
+ */
+function ubercoova_login_form() {
+  $form = array();
+  $form['username'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Username',
+    '#description' => t('Please enter your username'),
+    '#size' => 10,
+    '#required' => TRUE,
+  );
+  $form['password'] = array(
+    '#type' => 'password',
+    '#title' => 'Password',
+    '#description' => t('Please enter your password'),
+    '#size' => 10,
+    '#required' => TRUE,
+  );
+  $form['submit'] = array(
+    '#type' => 'button',
+    '#value' => t('Connect'),
+    '#attributes' => array('onClick' => 'connect();'),
+  );
+  $form['#redirect'] = url('hotspot');
+  return $form;
+}
+
+/**
+ * Return a login form that uses the hotspot javascript guff.
+ */
+function ubercoova_login_form_validate($form, &$form_state) {
+  if (empty($form_state['values']['username']))
+    form_set_error('username', t('Please enter your username'));
+  if (empty($form_state['values']['password']))
+    form_set_error('password', t('Please enter your password'));
+}
+
+/**
+ * Return a login form that uses the hotspot javascript guff.
+ */
+function ubercoova_login_form_submit($form, &$form_state) {
+  dpm($form);
+  dpm($form_state);
+}
+
+
+/**
  * Implementation of hook_theme().
  */
 function ubercoova_theme() {
@@ -189,7 +266,12 @@ function ubercoova_theme() {
  *   A translated themed string.
  */
 function theme_user_quota($quota) {
-  return t('Your remaining quota is @quota.', array('@quota' => ubercoova_format_size($quota)));
+  if (empty($quota)) {
+    return t("You don't have an Internet access account. To have one created speak to staff at your College.");
+  }
+  else {
+    return t('Your remaining quota is @quota.', array('@quota' => ubercoova_format_size($quota)));
+  }
 }
 
 /**
