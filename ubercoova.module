@@ -48,8 +48,8 @@ function ubercoova_form_alter(&$form, $form_state, $form_id) {
     break;
 
     case 'user_profile_form':
-      // Hide the email field if the user isn't an administrator.
-      if (!user_access('administer users')) {
+      // Hide the email field if the user isn't an administrator and email modification is disabled.
+      if (!variable_get('ubercoova_email_modify', 0) && !user_access('administer users')) {
         $form['account']['mail']['#disabled'] = TRUE;
         $form['account']['mail']['#type'] = 'hidden';
       }
@@ -95,7 +95,7 @@ function ubercoova_user_login_validate($form, &$form_state) {
         $user_attributes = array(
           'name' => $form_state['values']['name'],
           'pass' => $form_state['values']['pass'],
-          'mail' => $form_state['values']['name'] . '@radius',
+          'mail' => $form_state['values']['name'] . variable_get('ubercoova_email_domain', ''),
           'roles' => array_filter(array(DRUPAL_AUTHENTICATED_RID, $rid)),
           'status' => TRUE,
         );
@@ -115,24 +115,28 @@ function ubercoova_user_login_validate($form, &$form_state) {
  * Submit handler for the user/%/edit form.
  */
 function ubercoova_profile_form_submit($form, &$form_state) {
-  if (isset($form_state['values']['pass']) && $form_state['values']['pass']) {
-    // The user name is not present in the form if the user has no
-    // permissions to edit it. In that case, use the current user.
-    if (isset($form_state['values']['name'])) {
-      $name = $form_state['values']['name'];
-    }
-    else {
-      global $user;
-      $name = $user->name;
-    }
-
-    $table = variable_get('ubercoova_table', '');
-    $attribute = variable_get('ubercoova_attribute_password', '');
-
-    db_set_active('radius');
-    db_query("UPDATE %s SET value = '%s' WHERE username = '%s' AND attribute = '%s' AND op = '=='", $table, $form_state['values']['pass'], $name, $attribute);
-    db_set_active();
+  // The user name is not present in the form if the user has no
+  // permissions to edit it. In that case, use the user id from the url.
+  if (isset($form_state['values']['name'])) {
+    $name = $form_state['values']['name'];
   }
+  else {
+    $account = user_load(arg(1));
+    $name = $account->name;
+  }
+
+  $table = variable_get('ubercoova_table', '');
+  $password_attribute = variable_get('ubercoova_attribute_password', '');
+  $email_attribute = variable_get('ubercoova_attribute_email', '');
+
+  db_set_active('radius');
+  if (isset($form_state['values']['pass']) && $form_state['values']['pass'] && !empty($password_attribute)) {
+    db_query("UPDATE %s SET value = '%s' WHERE username = '%s' AND attribute = '%s' AND op = '=='", $table, $form_state['values']['pass'], $name, $password_attribute);
+  }
+  if (!empty($email_attribute)) {
+    db_query("UPDATE %s SET value = '%s' WHERE username = '%s' AND attribute = '%s' AND op = '=='", $table, $form_state['values']['mail'], $name, $email_attribute);
+  }
+  db_set_active();
 }
 
 /**

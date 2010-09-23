@@ -170,6 +170,16 @@ function ubercoova_action_update_quota($order) {
   db_query("UPDATE %s SET value = %f WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $quota, $account->name, $attribute);
   db_set_active();
 
+  // This action is performed as anonymous from uc_paypal, it seems. We want to
+  // log it as the user in question, so let's do a sneaky thing and temporarily
+  // oberride the global $user variable.
+  global $user;
+  $saved_user = $user;
+  $user = $account;
+
   // Watchdog log it, so if there is fail we can check.
   watchdog('ubercoova', 'Had !remaining. Bought !purchased. Now has !quota quota.', array('!remaining' => format_size($remaining), '!purchased' => format_size($purchased), '!quota' => format_size($quota)), WATCHDOG_INFO, NULL);
+
+  // and switch back to whatever $user was before.
+  $user = $saved_user;
 }

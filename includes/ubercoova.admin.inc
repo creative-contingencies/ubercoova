@@ -63,10 +63,10 @@ function ubercoova_settings() {
   }
 
   // Field definition details for FreeRADIUS.
-  $options = array('' => t('<none>'));
+  $attributes = array('' => t('<none>'));
   $result = db_query("SELECT DISTINCT(attribute) FROM %s ORDER BY attribute ASC", $table);
   while ($row = db_fetch_array($result)) {
-    $options[$row['attribute']] = $row['attribute'];
+    $attributes[$row['attribute']] = $row['attribute'];
   }
 
   // And switch back to the normal database.
@@ -76,14 +76,14 @@ function ubercoova_settings() {
     '#type' => 'select',
     '#title' => 'Password Attribute',
     '#description' => t('Select the %table attribute that contains the user\'s password. This allows users to login to Drupal using their radius credentials.', array('%table' => $table)),
-    '#options' => $options,
+    '#options' => $attributes,
     '#default_value' => variable_get('ubercoova_attribute_password', ''),
   );
   $form['ubercoova_attribute_quota'] = array(
     '#type' => 'select',
     '#title' => 'Quota Attribute',
     '#description' => t('Select the %table attribute that contains the user\'s quota. This allows users to purchase download quota.', array('%table' => $table)),
-    '#options' => $options,
+    '#options' => $attributes,
     '#default_value' => variable_get('ubercoova_attribute_quota', ''),
   );
 
@@ -94,6 +94,32 @@ function ubercoova_settings() {
     '#description' => t('Assign this role to a Drupal user when it is transposed from the radius database.'),
     '#options' => $options,
     '#default_value' => variable_get('ubercoova_rid', 0),
+  );
+
+  $form['email'] = array(
+    '#type' => 'fieldset',
+    '#title' => 'Email Settings',
+    '#collapsible' => TRUE,
+  );
+  $form['email']['ubercoova_attribute_email'] = array(
+    '#type' => 'select',
+    '#title' => 'Email Attribute',
+    '#description' => t('Select the %table attribute that contains the user\'s email address. This allows users to update their email addresses in radius.', array('%table' => $table)),
+    '#options' => $attributes,
+    '#default_value' => variable_get('ubercoova_attribute_email', ''),
+  );
+  $form['email']['ubercoova_email_domain'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Email Domain',
+    '#description' => t('Append this email domain to the username to generate email addresses for users. You can leave this blank if you don\'t want to generate email addresses.'),
+    '#default_value' => variable_get('ubercoova_email_domain', ''),
+  );
+  $form['email']['ubercoova_email_modify'] = array(
+    '#type' => 'radios',
+    '#title' => 'Edit Emails',
+    '#description' => t('Allow users to modify their own generated email addresses? Any changes a user makes will also be saved to the %table table.', array('%table' => $table)),
+    '#options' => array(0 => 'No', 1 => 'Yes'),
+    '#default_value' => variable_get('ubercoova_email_modify', 0),
   );
   
   return system_settings_form($form);
@@ -109,5 +135,9 @@ function ubercoova_settings_validate(&$form, &$form_state) {
     if (empty($attributes)) {
       form_set_error('ubercoova_table', t('The table %table does not contain an attribute column', array('%table' => $form_state['values']['ubercoova_table'])));
     }
+  }
+
+  if (!empty($form_state['values']['ubercoova_email_domain']) && (strpos($form_state['values']['ubercoova_email_domain'], '@') !== 0)) {
+    form_set_error('email][ubercoova_email_domain', t('An email domain must start with an @ symbol.'));
   }
 }
