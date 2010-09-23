@@ -101,13 +101,6 @@ function ubercoova_settings() {
     '#title' => 'Email Settings',
     '#collapsible' => TRUE,
   );
-  $form['email']['ubercoova_attribute_email'] = array(
-    '#type' => 'select',
-    '#title' => 'Email Attribute',
-    '#description' => t('Select the %table attribute that contains the user\'s email address. This allows users to update their email addresses in radius.', array('%table' => $table)),
-    '#options' => $attributes,
-    '#default_value' => variable_get('ubercoova_attribute_email', ''),
-  );
   $form['email']['ubercoova_email_domain'] = array(
     '#type' => 'textfield',
     '#title' => 'Email Domain',

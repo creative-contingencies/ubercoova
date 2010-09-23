@@ -115,28 +115,26 @@ function ubercoova_user_login_validate($form, &$form_state) {
  * Submit handler for the user/%/edit form.
  */
 function ubercoova_profile_form_submit($form, &$form_state) {
-  // The user name is not present in the form if the user has no
-  // permissions to edit it. In that case, use the user id from the url.
-  if (isset($form_state['values']['name'])) {
-    $name = $form_state['values']['name'];
-  }
-  else {
-    $account = user_load(arg(1));
-    $name = $account->name;
-  }
+  if (isset($form_state['values']['pass']) && $form_state['values']['pass']) {
+    // The user name is not present in the form if the user has no
+    // permissions to edit it. In that case, use the user id from the url.
+    if (isset($form_state['values']['name'])) {
+      $name = $form_state['values']['name'];
+    }
+    else {
+      $account = user_load(arg(1));
+      $name = $account->name;
+    }
 
-  $table = variable_get('ubercoova_table', '');
-  $password_attribute = variable_get('ubercoova_attribute_password', '');
-  $email_attribute = variable_get('ubercoova_attribute_email', '');
+    $table = variable_get('ubercoova_table', '');
+    $password_attribute = variable_get('ubercoova_attribute_password', '');
 
-  db_set_active('radius');
-  if (isset($form_state['values']['pass']) && $form_state['values']['pass'] && !empty($password_attribute)) {
-    db_query("UPDATE %s SET value = '%s' WHERE username = '%s' AND attribute = '%s' AND op = '=='", $table, $form_state['values']['pass'], $name, $password_attribute);
+    if (!empty($password_attribute)) {
+      db_set_active('radius');
+      db_query("UPDATE %s SET value = '%s' WHERE username = '%s' AND attribute = '%s' AND op = '=='", $table, $form_state['values']['pass'], $name, $password_attribute);
+      db_set_active();
+    }
   }
-  if (!empty($email_attribute)) {
-    db_query("UPDATE %s SET value = '%s' WHERE username = '%s' AND attribute = '%s' AND op = '=='", $table, $form_state['values']['mail'], $name, $email_attribute);
-  }
-  db_set_active();
 }
 
 /**
