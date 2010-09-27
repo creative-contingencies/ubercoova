@@ -177,29 +177,132 @@ function ubercoova_block($op = 'list', $delta = 0, $edit = array()) {
   switch ($op) {
     case 'list':
       $blocks = array();
-      $blocks[0]['info'] = t('Hotspot login block');
+      $blocks[0]['info'] = t('UberCoova login block');
       return $blocks;
-      
+
     case 'view':
       $block = array();
-      $block['subject'] = 'Internet Login';
-      $block['content'] = drupal_get_form('ubercoova_login_form');
+      if ($delta == 0) {
+        drupal_add_js(drupal_get_path('module', 'hotspot').'/ChilliLibrary.js');
+        drupal_add_js(drupal_get_path('module', 'hotspot').'/chilliController.js');
+        drupal_add_js(_get_include_contents(drupal_get_path('module', 'hotspot').'/chillijs.php'), 'inline');
+
+        $block['subject'] = 'Internet Login';
+        $block['content'] = drupal_get_form('ubercoova_login_form');
+      }
       return $block;
+      break;
+
+    case 'configure':
+      if ($delta == 0) {
+        $form['ubercoova']['ubercoova_login_redirect'] = array(
+          '#type' => 'textfield',
+          '#title' => t('Login Redirect'),
+          '#description' => t('Redirect a user to this url after successful UberCoova login.'),
+          '#default_value' => variable_get('ubercoova_login_redirect', url('hotspot')),
+        );
+        return $form;
+      }
+      break;
+
+    case 'save':
+      if ($delta == 0) {
+        $item = array('link_path' => $edit['ubercoova_login_redirect']);
+        $normal_path = drupal_get_normal_path($item['link_path']);
+        if ($item['link_path'] != $normal_path) {
+          drupal_set_message(t('The menu system stores system paths only, but will use the URL alias for display. %link_path has been stored as %normal_path', array('%link_path' => $item['link_path'], '%normal_path' => $normal_path)));
+          $item['link_path'] = $normal_path;
+        }
+        if (!empty($item) && !menu_valid_path($item)) {
+          drupal_set_message(t("The path '@path' is either invalid or you do not have access to it.", array('@path' => $item['link_path'])), 'error');
+        }
+        else {
+          variable_set('ubercoova_login_redirect', $item['link_path']);
+        }
+      }
+      break;
+      
   }
 }
 
-/*
-  <td class="tableTabBottom">
-        <div class="usernameRow">
-          <span id="usernameLabel">'.$u.'</span>
-          <input name="username" type="text" id="username" size="10"/>
-          <span id="passwordField"><span id="passwordLabel">'.$p.'</span>
-        <input name="password" type="password" id="password" size="10"/></span>
-        </div>
-        
-        <div class="connectRow">
-          <input id="connectButton" type="submit" value="Connect" onClick="connect();"/><span id="logonMessag
-*/
+function ubercoova_hotspot_gibberish() {
+return '<div id="statusPage" style="display:none;">
+  <table id="tableTab" cellpadding="0" cellspacing="0">
+    <tr>
+      <td class="navRow">
+	<table id="navTable" cellpadding="0" cellspacing="0" border="0" width="100%">
+	  <tr>
+	    <td class="tableTabFirst">&nbsp;</td>
+	    <td class="tableTabItem-selected" id="tabStatus" nowrap="nowrap" onClick="javascript:return statusTab(\'Status\');">Status</td>
+	    <td class="tableTabLast">&nbsp;</td>
+	  </tr>
+	</table>
+      </td>
+    </tr>
+    <tr>
+      <td class="tableTabBottom">
+	<table border="0" id="statusTable" style="padding-top:4px;">
+	  <tr id="connectRow">
+	    <td><span id="statusMessage">Connected</span></td>
+	    <td><a href="#" onClick="return disconnect();">logout</a></td>
+	  </tr>
+	  <tr id="sessionIdRow">
+	    <td id="sessionIdLabel" class="chilliLabel">Session ID</td>
+	    <td id="sessionId" class="chilliValue">Not available</td>
+	  </tr>
+	  <tr id="startTimeRow">
+	    <td id="startTimeLabel" class="chilliLabel">Start Time</td>
+	    <td id="startTime" class="chilliValue">Not available</td>
+	  </tr>
+	  <tr id="sessionTimeRow">
+	    <td id="sessionTimeLabel" class="chilliLabel">Session Time</td>
+	    <td id="sessionTime" class="chilliValue">
+              <span id="time">Not available</span>
+              <span id="timelimit">&nbsp;</span>
+              <span id="timeleft">&nbsp;</span>
+	    </td>
+	  </tr>
+	  <tr id="idleTimeRow">
+	    <td id="idleTimeLabel" class="chilliLabel">Idle Time</td>
+	    <td id="idleTime" class="chilliValue">
+              <span id="idle">Not available</span>
+              <span id="idlelimit">&nbsp;</span>
+              <span id="idleleft">&nbsp;</span>
+	    </td>
+	  </tr>
+	  <tr id="downOctetsRow">
+	    <td id="downOctetsLabel" class="chilliLabel">Downloaded</td>
+	    <td id="downOctets" class="chilliValue">
+	      <span id="down">Not available</span>
+	      <span id="downlimit">&nbsp;</span>
+	      <span id="downleft">&nbsp;</span>
+	    </td>
+	  </tr>
+	  <tr id="upOctetsRow">
+	    <td id="upOctetsLabel" class="chilliLabel">Uploaded</td>
+	    <td id="upOctets" class="chilliValue">
+	      <span id="up">Not available</span>
+	      <span id="uplimit">&nbsp;</span>
+	      <span id="upleft">&nbsp;</span>
+	    </td>
+	  </tr>
+	  <tr id="originalURLRow">
+	    <td id="originalURLLabel" class="chilliLabel">Original URL</td>
+	    <td id="originalURL" class="chilliValue">N/A</td>
+	  </tr>
+	</table>
+    </td></tr>
+    <tr>
+      <td colspan="3" align="right" style="font-size: 8px;padding: 0px 2px 1px 0px;">Authentication services by <a href="http://www.coova.org/" target="_blank">coova</a>&nbsp;<a href="http://www.coova.org/" target="_blank"><span id="coova-icon"></span></a>&nbsp;</td>
+    </tr>
+  </table>
+</div>
+
+<div id="waitPage" style="display:none;">
+  Please wait...
+</div>
+';
+}
 
 /**
  * Return a login form that uses the hotspot javascript guff.
@@ -212,6 +315,7 @@ function ubercoova_login_form() {
     '#description' => t('Please enter your username'),
     '#size' => 10,
     '#required' => TRUE,
+    '#id' => 'username',
   );
   $form['password'] = array(
     '#type' => 'password',
@@ -219,13 +323,13 @@ function ubercoova_login_form() {
     '#description' => t('Please enter your password'),
     '#size' => 10,
     '#required' => TRUE,
+    '#id' => 'password',
   );
-  $form['submit'] = array(
-    '#type' => 'button',
-    '#value' => t('Connect'),
-    '#attributes' => array('onClick' => 'connect();'),
+  $form['button'] = array(
+    '#type' => 'markup',
+    '#value' => '<input type="button" value="Connect" onClick="connect();" />',
   );
-  $form['#redirect'] = url('hotspot');
+  $form['#redirect'] = FALSE;
   return $form;
 }
 
