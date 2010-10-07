@@ -48,8 +48,8 @@ function ubercoova_form_alter(&$form, $form_state, $form_id) {
     break;
 
     case 'user_profile_form':
-      // Hide the email field if the user isn't an administrator.
-      if (!user_access('administer users')) {
+      // Hide the email field if the user isn't an administrator and email modification is disabled.
+      if (!variable_get('ubercoova_email_modify', 0) && !user_access('administer users')) {
         $form['account']['mail']['#disabled'] = TRUE;
         $form['account']['mail']['#type'] = 'hidden';
       }
@@ -58,7 +58,6 @@ function ubercoova_form_alter(&$form, $form_state, $form_id) {
       $form['#submit'][] = 'ubercoova_profile_form_submit';
       break;
   }
-
 }
 
 /**
@@ -96,7 +95,7 @@ function ubercoova_user_login_validate($form, &$form_state) {
         $user_attributes = array(
           'name' => $form_state['values']['name'],
           'pass' => $form_state['values']['pass'],
-          'mail' => $form_state['values']['name'] . '@radius',
+          'mail' => $form_state['values']['name'] . variable_get('ubercoova_email_domain', ''),
           'roles' => array_filter(array(DRUPAL_AUTHENTICATED_RID, $rid)),
           'status' => TRUE,
         );
@@ -118,21 +117,23 @@ function ubercoova_user_login_validate($form, &$form_state) {
 function ubercoova_profile_form_submit($form, &$form_state) {
   if (isset($form_state['values']['pass']) && $form_state['values']['pass']) {
     // The user name is not present in the form if the user has no
-    // permissions to edit it. In that case, use the current user.
+    // permissions to edit it. In that case, use the user id from the url.
     if (isset($form_state['values']['name'])) {
       $name = $form_state['values']['name'];
     }
     else {
-      global $user;
-      $name = $user->name;
+      $account = user_load(arg(1));
+      $name = $account->name;
     }
 
     $table = variable_get('ubercoova_table', '');
-    $attribute = variable_get('ubercoova_attribute_password', '');
+    $password_attribute = variable_get('ubercoova_attribute_password', '');
 
-    db_set_active('radius');
-    db_query("UPDATE %s SET value = '%s' WHERE username = '%s' AND attribute = '%s' AND op = '=='", $table, $form_state['values']['pass'], $name, $attribute);
-    db_set_active();
+    if (!empty($password_attribute)) {
+      db_set_active('radius');
+      db_query("UPDATE %s SET value = '%s' WHERE username = '%s' AND attribute = '%s' AND op = '=='", $table, $form_state['values']['pass'], $name, $password_attribute);
+      db_set_active();
+    }
   }
 }
 
@@ -180,6 +181,210 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
 }
 
 /**
+ * Implementation of hook_block()
+ */
+function ubercoova_block($op = 'list', $delta = 0, $edit = array()) {
+  switch ($op) {
+    case 'list':
+      $blocks = array();
+      $blocks[0]['info'] = t('UberCoova login block');
+      return $blocks;
+
+    case 'view':
+      $block = array();
+      if ($delta == 0) {
+        drupal_add_js(drupal_get_path('module', 'hotspot').'/ChilliLibrary.js');
+        drupal_add_js(drupal_get_path('module', 'hotspot').'/chilliController.js');
+	drupal_add_js(_get_include_contents(drupal_get_path('module', 'hotspot').'/chillijs.php'), 'inline');
+
+	/* We need this next block to set session variables regardless of which
+	 * page we land on.  The hotspot module only sets these if you land on
+	 * /hotspot, which is too restrictive.
+	*/
+	if (isset($_GET['uamip']) && isset($_GET['uamport'])) {
+	  $_SESSION['hotspot'] = 'true';
+	  $_SESSION['controller'] = 'chilli';
+	  $_SESSION['uamqs'] = $_SERVER['QUERY_STRING'];
+	  $_SESSION['logouturl'] = "http://".$_GET['uamip'].":".$_GET['uamport']."/logout";
+	  $_SESSION['loginurl'] = '';
+	  hotspot_set_session('ssl');
+	  hotspot_set_session('uamip');
+	  hotspot_set_session('uamport');
+	  hotspot_set_session('challenge');
+	  hotspot_set_session('userurl');
+	  hotspot_set_session('called');
+	  hotspot_set_session('mac');
+	  hotspot_set_session('res');
+
+	  hotspot_save_cookie();
+	} 
+		  
+        $block['subject'] = 'Internet Login';
+        $block['content'] = drupal_get_form('ubercoova_login_form');
+      }
+      return $block;
+      break;
+
+    case 'configure':
+      if ($delta == 0) {
+        $form['ubercoova']['ubercoova_login_redirect'] = array(
+          '#type' => 'textfield',
+          '#title' => t('Login Redirect'),
+          '#description' => t('Redirect a user to this url after successful UberCoova login.'),
+          '#default_value' => variable_get('ubercoova_login_redirect', url('hotspot')),
+        );
+        return $form;
+      }
+      break;
+
+    case 'save':
+      if ($delta == 0) {
+        $item = array('link_path' => $edit['ubercoova_login_redirect']);
+        $normal_path = drupal_get_normal_path($item['link_path']);
+        if ($item['link_path'] != $normal_path) {
+          drupal_set_message(t('The menu system stores system paths only, but will use the URL alias for display. %link_path has been stored as %normal_path', array('%link_path' => $item['link_path'], '%normal_path' => $normal_path)));
+          $item['link_path'] = $normal_path;
+        }
+        if (!empty($item) && !menu_valid_path($item)) {
+          drupal_set_message(t("The path '@path' is either invalid or you do not have access to it.", array('@path' => $item['link_path'])), 'error');
+        }
+        else {
+          variable_set('ubercoova_login_redirect', $item['link_path']);
+        }
+      }
+      break;
+      
+  }
+}
+
+function ubercoova_hotspot_gibberish() {
+return '<div id="statusPage" style="display:none;">
+  <table id="tableTab" cellpadding="0" cellspacing="0">
+    <tr>
+      <td class="navRow">
+	<table id="navTable" cellpadding="0" cellspacing="0" border="0" width="100%">
+	  <tr>
+	    <td class="tableTabFirst">&nbsp;</td>
+	    <td class="tableTabItem-selected" id="tabStatus" nowrap="nowrap" onClick="javascript:return statusTab(\'Status\');">Status</td>
+	    <td class="tableTabLast">&nbsp;</td>
+	  </tr>
+	</table>
+      </td>
+    </tr>
+    <tr>
+      <td class="tableTabBottom">
+	<table border="0" id="statusTable" style="padding-top:4px;">
+	  <tr id="connectRow">
+	    <td><span id="statusMessage">Connected</span></td>
+	    <td><a href="#" onClick="return disconnect();">logout</a></td>
+	  </tr>
+	  <tr id="sessionIdRow">
+	    <td id="sessionIdLabel" class="chilliLabel">Session ID</td>
+	    <td id="sessionId" class="chilliValue">Not available</td>
+	  </tr>
+	  <tr id="startTimeRow">
+	    <td id="startTimeLabel" class="chilliLabel">Start Time</td>
+	    <td id="startTime" class="chilliValue">Not available</td>
+	  </tr>
+	  <tr id="sessionTimeRow">
+	    <td id="sessionTimeLabel" class="chilliLabel">Session Time</td>
+	    <td id="sessionTime" class="chilliValue">
+              <span id="time">Not available</span>
+              <span id="timelimit">&nbsp;</span>
+              <span id="timeleft">&nbsp;</span>
+	    </td>
+	  </tr>
+	  <tr id="idleTimeRow">
+	    <td id="idleTimeLabel" class="chilliLabel">Idle Time</td>
+	    <td id="idleTime" class="chilliValue">
+              <span id="idle">Not available</span>
+              <span id="idlelimit">&nbsp;</span>
+              <span id="idleleft">&nbsp;</span>
+	    </td>
+	  </tr>
+	  <tr id="downOctetsRow">
+	    <td id="downOctetsLabel" class="chilliLabel">Downloaded</td>
+	    <td id="downOctets" class="chilliValue">
+	      <span id="down">Not available</span>
+	      <span id="downlimit">&nbsp;</span>
+	      <span id="downleft">&nbsp;</span>
+	    </td>
+	  </tr>
+	  <tr id="upOctetsRow">
+	    <td id="upOctetsLabel" class="chilliLabel">Uploaded</td>
+	    <td id="upOctets" class="chilliValue">
+	      <span id="up">Not available</span>
+	      <span id="uplimit">&nbsp;</span>
+	      <span id="upleft">&nbsp;</span>
+	    </td>
+	  </tr>
+	  <tr id="originalURLRow">
+	    <td id="originalURLLabel" class="chilliLabel">Original URL</td>
+	    <td id="originalURL" class="chilliValue">N/A</td>
+	  </tr>
+	</table>
+    </td></tr>
+    <tr>
+      <td colspan="3" align="right" style="font-size: 8px;padding: 0px 2px 1px 0px;">Authentication services by <a href="http://www.coova.org/" target="_blank">coova</a>&nbsp;<a href="http://www.coova.org/" target="_blank"><span id="coova-icon"></span></a>&nbsp;</td>
+    </tr>
+  </table>
+</div>
+
+<div id="waitPage" style="display:none;">
+  Please wait...
+</div>
+';
+}
+
+/**
+ * Return a login form that uses the hotspot javascript guff.
+ */
+function ubercoova_login_form() {
+  $form = array();
+  $form['username'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Username',
+    '#description' => t('Please enter your username'),
+    '#size' => 10,
+    '#required' => TRUE,
+    '#id' => 'username',
+  );
+  $form['password'] = array(
+    '#type' => 'password',
+    '#title' => 'Password',
+    '#description' => t('Please enter your password'),
+    '#size' => 10,
+    '#required' => TRUE,
+    '#id' => 'password',
+  );
+  $form['button'] = array(
+    '#type' => 'markup',
+    '#value' => '<input type="button" value="Connect" onClick="connect();" />',
+  );
+  $form['#redirect'] = FALSE;
+  return $form;
+}
+
+/**
+ * Return a login form that uses the hotspot javascript guff.
+ */
+function ubercoova_login_form_validate($form, &$form_state) {
+  if (empty($form_state['values']['username']))
+    form_set_error('username', t('Please enter your username'));
+  if (empty($form_state['values']['password']))
+    form_set_error('password', t('Please enter your password'));
+}
+
+/**
+ * Return a login form that uses the hotspot javascript guff.
+ */
+function ubercoova_login_form_submit($form, &$form_state) {
+  dpm($form);
+  dpm($form_state);
+}
+
+
+/**
  * Implementation of hook_theme().
  */
 function ubercoova_theme() {
@@ -199,7 +404,12 @@ function ubercoova_theme() {
  *   A translated themed string.
  */
 function theme_user_quota($quota) {
-  return t('Your remaining quota is @quota.', array('@quota' => ubercoova_format_size($quota)));
+  if (empty($quota)) {
+    return t("You don't have an Internet access account. To have one created speak to staff at your College.");
+  }
+  else {
+    return t('Your remaining quota is @quota.', array('@quota' => ubercoova_format_size($quota)));
+  }
 }
 
 /**
