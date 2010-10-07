@@ -148,9 +148,19 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
       if ($user->uid && (($user->uid == $account->uid) || user_access('access user profiles'))) {
         $attribute = variable_get('ubercoova_attribute_quota', '');
         $table = variable_get('ubercoova_table', '');
+        $table_acct = variable_get('ubercoova_table_accounting', '');
+        $field_acct = variable_get('ubercoova_field_accounting', '');
         db_set_active('radius');
         $quota = db_result(db_query("SELECT value FROM " . $table . " WHERE username = '%s' and attribute = '%s' AND op = ':='", $account->name, $attribute));
+        $traffic = db_result(db_query("SELECT SUM(%s) FROM " . $table_acct . " WHERE username = '%s'", $field_acct, $account->name));
+	
         db_set_active();
+
+	if ($quota < $traffic) {
+	  $quota = 0;
+	} else {
+	  $quota -= $traffic;
+	}
 
         $account->content['quota'] = array(
           '#type' => 'user_profile_category',
