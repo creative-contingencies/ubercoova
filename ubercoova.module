@@ -187,7 +187,6 @@ function ubercoova_block($op = 'list', $delta = 0, $edit = array()) {
   switch ($op) {
     case 'list':
       $blocks = array();
-<<<<<<< HEAD
       $blocks[0]['info'] = t('UberCoova login block');
       return $blocks;
 
@@ -336,31 +335,6 @@ return '<div id="statusPage" style="display:none;">
 </div>
 ';
 }
-=======
-      $blocks[0]['info'] = t('Hotspot login block');
-      return $blocks;
-      
-    case 'view':
-      $block = array();
-      $block['subject'] = 'Internet Login';
-      $block['content'] = drupal_get_form('ubercoova_login_form');
-      return $block;
-  }
-}
-
-/*
-  <td class="tableTabBottom">
-        <div class="usernameRow">
-          <span id="usernameLabel">'.$u.'</span>
-          <input name="username" type="text" id="username" size="10"/>
-          <span id="passwordField"><span id="passwordLabel">'.$p.'</span>
-        <input name="password" type="password" id="password" size="10"/></span>
-        </div>
-        
-        <div class="connectRow">
-          <input id="connectButton" type="submit" value="Connect" onClick="connect();"/><span id="logonMessag
-*/
->>>>>>> 8f9a3fd46f208caafe771918a5a43c6d97103798
 
 /**
  * Return a login form that uses the hotspot javascript guff.
@@ -373,10 +347,7 @@ function ubercoova_login_form() {
     '#description' => t('Please enter your username'),
     '#size' => 10,
     '#required' => TRUE,
-<<<<<<< HEAD
     '#id' => 'username',
-=======
->>>>>>> 8f9a3fd46f208caafe771918a5a43c6d97103798
   );
   $form['password'] = array(
     '#type' => 'password',
@@ -384,7 +355,6 @@ function ubercoova_login_form() {
     '#description' => t('Please enter your password'),
     '#size' => 10,
     '#required' => TRUE,
-<<<<<<< HEAD
     '#id' => 'password',
   );
   $form['button'] = array(
@@ -392,15 +362,6 @@ function ubercoova_login_form() {
     '#value' => '<input type="button" value="Connect" onClick="connect();" />',
   );
   $form['#redirect'] = FALSE;
-=======
-  );
-  $form['submit'] = array(
-    '#type' => 'button',
-    '#value' => t('Connect'),
-    '#attributes' => array('onClick' => 'connect();'),
-  );
-  $form['#redirect'] = url('hotspot');
->>>>>>> 8f9a3fd46f208caafe771918a5a43c6d97103798
   return $form;
 }
 
