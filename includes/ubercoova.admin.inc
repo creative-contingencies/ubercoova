@@ -34,6 +34,7 @@ function ubercoova_settings() {
 
   // Default table, saves us a db_switch later.
   $table = variable_get('ubercoova_table', '');
+  $table_acct = variable_get('ubercoova_table_accounting', '');
 
   // Switch to the radius database and check that the table exists. We re-do
   // this in case $db_url has changed,
@@ -49,7 +50,7 @@ function ubercoova_settings() {
 
   $form['ubercoova_table'] = array(
     '#type' => 'select',
-    '#title' => 'Table',
+    '#title' => 'RADIUS Check Table',
     '#description' => t('Select the table that holds radius account and quota information for each user.'),
     '#options' => $options,
     '#default_value' => $table,
@@ -62,7 +63,7 @@ function ubercoova_settings() {
     return system_settings_form($form);
   }
 
-  // Field definition details for FreeRADIUS.
+  // Field definition details of check table for FreeRADIUS.
   $attributes = array('' => t('<none>'));
   $result = db_query("SELECT DISTINCT(attribute) FROM %s ORDER BY attribute ASC", $table);
   while ($row = db_fetch_array($result)) {
@@ -85,6 +86,48 @@ function ubercoova_settings() {
     '#description' => t('Select the %table attribute that contains the user\'s quota. This allows users to purchase download quota.', array('%table' => $table)),
     '#options' => $attributes,
     '#default_value' => variable_get('ubercoova_attribute_quota', ''),
+  );
+
+  // Switch to the radius database and check that the table exists. Maybe this
+	// could be done above and the switch back to the default removed? Not
+	// familiar enough w/ drupal to know if this is courting disaster. LOOKS safe
+	// enough
+  db_set_active('radius');
+  $table_acct = db_table_exists($table_acct) ? $table_acct : '';
+  
+  // We need to be able to get accounting info from radius to properly display
+  // users' remaining quota on their account page.
+  $form['ubercoova_table_accounting'] = array(
+    '#type' => 'select',
+    '#title' => 'RADIUS Accounting Table',
+    '#description' => t('Select the table that holds radius session accounting information for each user.'),
+    '#options' => $options,
+    '#default_value' => $table_acct,
+  );
+
+  // Make sure the user has chosen a table before the next field is
+  // shown. If not, switch back to default db and exit.
+  if (empty($table)) {
+    db_set_active();
+    return system_settings_form($form);
+  }
+
+  // Field definition details for accounting table of FreeRADIUS.
+  $fields_acct = array('' => t('<none>'));
+  $result = db_query("SHOW COLUMNS FROM %s LIKE '%octets'", $table_acct);
+  while ($row = db_fetch_array($result)) {
+    $fields_acct[$row['Field']] = $row['Field'];
+  }
+
+  // And switch back to the normal database.
+  db_set_active();
+
+  $form['ubercoova_field_accounting'] = array(
+    '#type' => 'select',
+    '#title' => 'RADIUS accouting table field',
+    '#description' => t('Select the %table_acct column that contains the downstream traffic (clients\' perspective) accounting data. This option is provided to adjust for the CoovaChilli swapoctets command.', array('%table_acct' => $table_acct)),
+    '#options' => $fields_acct,
+    '#default_value' => variable_get('ubercoova_field_accounting', ''),
   );
 
   $options = array_merge(array(0 => '<none>'), user_roles(TRUE));
