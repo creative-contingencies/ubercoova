@@ -92,10 +92,17 @@ function ubercoova_user_login_validate($form, &$form_state) {
       // in Drupal is updated to match the radius one, so the auth check
       // that runs in user.module after this validator will succeed.
       if ($account->uid == 0) {
+      
+        // Check if we are giving all RADIUS users the same email address
+        if ($mail_addr = variable_get('ubercoova_email_uname', '')) {
+          $mail_addr .= variable_get('ubercoova_email_domain', '');
+        } else {
+          $mail_addr = $form_state['values']['name'] . variable_get('ubercoova_email_domain', '');
+        }
         $user_attributes = array(
           'name' => $form_state['values']['name'],
           'pass' => $form_state['values']['pass'],
-          'mail' => $form_state['values']['name'] . variable_get('ubercoova_email_domain', ''),
+          'mail' => $mail_addr,
           'roles' => array_filter(array(DRUPAL_AUTHENTICATED_RID, $rid)),
           'status' => TRUE,
         );

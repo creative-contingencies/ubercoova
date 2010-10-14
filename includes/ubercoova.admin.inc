@@ -144,6 +144,12 @@ function ubercoova_settings() {
     '#title' => 'Email Settings',
     '#collapsible' => TRUE,
   );
+  $form['email']['ubercoova_email_uname'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Email Username',
+    '#description' => t('All users imported from RADIUS will be given this as their email username. You can leave this blank if you want to use the username imported from RADIUS.'),
+    '#default_value' => variable_get('ubercoova_email_uname', ''),
+  );
   $form['email']['ubercoova_email_domain'] = array(
     '#type' => 'textfield',
     '#title' => 'Email Domain',
