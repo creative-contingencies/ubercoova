@@ -134,7 +134,7 @@ function ubercoova_settings() {
   $form['ubercoova_rid'] = array(
     '#type' => 'select',
     '#title' => 'Assign Role',
-    '#description' => t('Assign this role to a Drupal user when it is transposed from the radius database.'),
+    '#description' => t('Assign this role to a Drupal user when it is newly created from the radius database.'),
     '#options' => $options,
     '#default_value' => variable_get('ubercoova_rid', 0),
   );
@@ -143,6 +143,12 @@ function ubercoova_settings() {
     '#type' => 'fieldset',
     '#title' => 'Email Settings',
     '#collapsible' => TRUE,
+  );
+  $form['email']['ubercoova_email_uname'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Email Username',
+    '#description' => t('All users imported from RADIUS will be given this as their email username. You can leave this blank if you want to use the username imported from RADIUS.'),
+    '#default_value' => variable_get('ubercoova_email_uname', ''),
   );
   $form['email']['ubercoova_email_domain'] = array(
     '#type' => 'textfield',
