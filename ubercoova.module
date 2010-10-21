@@ -305,29 +305,28 @@ function ubercoova_block($op = 'list', $delta = 0, $edit = array()) {
       if ($delta == 0) {
         drupal_add_js(drupal_get_path('module', 'hotspot').'/ChilliLibrary.js');
         drupal_add_js(drupal_get_path('module', 'hotspot').'/chilliController.js');
-	drupal_add_js(_get_include_contents(drupal_get_path('module', 'hotspot').'/chillijs.php'), 'inline');
+	    drupal_add_js(_get_include_contents(drupal_get_path('module', 'hotspot').'/chillijs.php'), 'inline');
 
-	/* We need this next block to set session variables regardless of which
-	 * page we land on.  The hotspot module only sets these if you land on
-	 * /hotspot, which is too restrictive.
-	*/
-	if (isset($_GET['uamip']) && isset($_GET['uamport'])) {
-	  $_SESSION['hotspot'] = 'true';
-	  $_SESSION['controller'] = 'chilli';
-	  $_SESSION['uamqs'] = $_SERVER['QUERY_STRING'];
-	  $_SESSION['logouturl'] = "http://".$_GET['uamip'].":".$_GET['uamport']."/logout";
-	  $_SESSION['loginurl'] = '';
-	  hotspot_set_session('ssl');
-	  hotspot_set_session('uamip');
-	  hotspot_set_session('uamport');
-	  hotspot_set_session('challenge');
-	  hotspot_set_session('userurl');
-	  hotspot_set_session('called');
-	  hotspot_set_session('mac');
-	  hotspot_set_session('res');
+	    // We need this next block to set session variables regardless of which
+	    // page we land on.  The hotspot module only sets these if you land on
+	    // /hotspot, which is too restrictive.
+        if (isset($_GET['uamip']) && isset($_GET['uamport'])) {
+          $_SESSION['hotspot'] = 'true';
+          $_SESSION['controller'] = 'chilli';
+          $_SESSION['uamqs'] = $_SERVER['QUERY_STRING'];
+          $_SESSION['logouturl'] = "http://".$_GET['uamip'].":".$_GET['uamport']."/logout";
+          $_SESSION['loginurl'] = '';
+          hotspot_set_session('ssl');
+          hotspot_set_session('uamip');
+          hotspot_set_session('uamport');
+          hotspot_set_session('challenge');
+          hotspot_set_session('userurl');
+          hotspot_set_session('called');
+          hotspot_set_session('mac');
+          hotspot_set_session('res');
 
-	  hotspot_save_cookie();
-	} 
+          hotspot_save_cookie();
+        } 
 		  
         $block['subject'] = 'Internet Login';
         $block['content'] = drupal_get_form('ubercoova_login_form');
@@ -465,6 +464,7 @@ function ubercoova_login_form() {
     '#description' => t('Please enter your password'),
     '#size' => 10,
     '#required' => TRUE,
+    '#id' => 'password',
     '#id' => 'password',
   );
   $form['button'] = array(
