@@ -22,6 +22,15 @@ function ubercoova_menu() {
     'file' => 'includes/ubercoova.admin.inc',
     'type' => MENU_NORMAL_ITEM,
   );
+  $items['user/%user/sessions'] = array(
+    'title' => 'Sessions',
+    'description' => 'List recent sessions',
+    'page callback' => 'ubercoova_user_sessions',
+    'page arguments' => array(1),
+    'access callback' => 'user_view_access',
+    'access arguments' => array(1),
+    'type' => MENU_LOCAL_TASK,
+  );
   return $items;
 }
 
@@ -45,7 +54,7 @@ function ubercoova_form_alter(&$form, $form_state, $form_id) {
       $form['#validate'] = is_array($form['#validate']) ? $form['#validate'] : array();
       // Our validate function *MUST* run first.
       array_unshift($form['#validate'], 'ubercoova_user_login_validate');
-    break;
+      break;
 
     case 'user_profile_form':
       // Hide the email field if the user isn't an administrator and email modification is disabled.
@@ -150,6 +159,41 @@ function ubercoova_profile_form_submit($form, &$form_state) {
       db_set_active();
     }
   }
+
+  $account = user_load(arg(1));
+
+  // Check if the selected form status is the same as the current user status.
+  if ($account->status != $form_state['values']['status']) {
+    $table = variable_get('ubercoova_table', '');
+    $table_ug = variable_get('ubercoova_table_usergroup', '');
+
+    if (empty($table) || empty($table_ug)) {
+      break;
+    }
+
+    switch ($form_state['values']['status']) {
+      case 0:
+        db_set_active('radius');
+        db_query("INSERT INTO " . $table . " (id, username, attribute, op, value) VALUES (0, '%s', 'Fall-Through', '=', 'yes')", $account->name);
+        db_query("INSERT INTO " . $table_ug . " (username, groupname, priority) VALUES ('%s', 'disabled', DEFAULT)", $account->name);
+        db_set_active();
+        break;
+
+      case 1:
+        db_set_active('radius');
+        db_query("DELETE FROM " . $table . " WHERE username = '%s' AND attribute = 'Fall-Through' AND op = '=' AND value = 'yes'", $account->name);
+        db_query("DELETE FROM " . $table_ug . " WHERE username = '%s' AND groupname = 'disabled'", $account->name);
+        db_set_active();
+        break;
+
+      default:
+        drupal_set_message(t('An unknown user status was detected. Not modifying RADIUS.'), 'warning');
+        break;
+    }
+  } // endif status changed.
+
+  // No need for this anymore, free it.
+  unset($account);
 }
 
 /**
@@ -166,17 +210,17 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
         $table = variable_get('ubercoova_table', '');
         $table_acct = variable_get('ubercoova_table_accounting', '');
         $field_acct = variable_get('ubercoova_field_accounting', '');
+
         db_set_active('radius');
         $quota = db_result(db_query("SELECT value FROM " . $table . " WHERE username = '%s' and attribute = '%s' AND op = ':='", $account->name, $attribute));
         $traffic = db_result(db_query("SELECT SUM(%s) FROM " . $table_acct . " WHERE username = '%s'", $field_acct, $account->name));
-	
         db_set_active();
 
-	if ($quota < $traffic) {
-	  $quota = 0;
-	} else {
-	  $quota -= $traffic;
-	}
+	    if ($quota < $traffic) {
+	      $quota = 0;
+	    } else {
+	      $quota -= $traffic;
+	    }
 
         $account->content['quota'] = array(
           '#type' => 'user_profile_category',
@@ -190,6 +234,16 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
 
         // There is an orders tab, no need to duplicate this.
         unset($account->content['orders']);
+      }
+      break;
+
+    // User is being deleted. Also delete them from RADIUS.
+    case 'delete':
+     if (variable_get('ubercoova_cleanup', 0)) {
+       $tables = array_filter(variable_get('ubercoova_cleanup_tables', array()));
+       foreach ($tables as $table) {
+         db_query("DELETE FROM " . check_plain($table) . " WHERE username = '%s'", $account->name);
+       }
       }
       break;
   }
@@ -394,8 +448,8 @@ function ubercoova_login_form_validate($form, &$form_state) {
  * Return a login form that uses the hotspot javascript guff.
  */
 function ubercoova_login_form_submit($form, &$form_state) {
-  dpm($form);
-  dpm($form_state);
+  // dpm($form);
+  // dpm($form_state);
 }
 
 
@@ -425,6 +479,53 @@ function theme_user_quota($quota) {
   else {
     return t('Your remaining quota is @quota.', array('@quota' => ubercoova_format_size($quota)));
   }
+}
+
+/**
+ * Function to display recent sessions on the /user/%/sessions page.
+ *
+ * @param $account
+ *   A valid user account.
+ * @return
+ *   A translated themed string.
+ */
+function ubercoova_user_sessions($account) {
+  drupal_set_title(t('Sessions'));
+
+  $table_acct = variable_get('ubercoova_table_accounting', '');
+  if (empty($table_acct)) {
+    return t('No recent sessions.');
+  }
+
+  $header = array(
+    array('data' => t('Start'),             'field' => 'acctstarttime', 'sort' => 'desc'),
+    array('data' => t('Finish'),            'field' => 'acctstoptime'),
+    array('data' => t('IP Address'),        'field' => 'framedipaddress'),
+    array('data' => t('Uploaded'),          'field' => 'acctoutputoctets'),
+    array('data' => t('Downloaded'),        'field' => 'acctinputoctets'),
+    array('data' => t('Termination Cause'), 'field' => 'acctterminatecause'),
+  );
+
+  $query = "SELECT acctstarttime, acctstoptime, framedipaddress, acctoutputoctets, acctinputoctets, acctterminatecause FROM " . $table_acct . " WHERE username = '" .  check_plain($account->name) ."'";
+  $query = $query . tablesort_sql($header);
+
+  db_set_active('radius');
+  $result = pager_query($query, 15, 0);
+  while ($row = db_fetch_array($result)) {
+    $rows[] = array(
+      'start' => $row['acctstarttime'],
+      'finish' => $row['acctstoptime'],
+      'address' => $row['framedipaddress'],
+      'uploaded' => ubercoova_format_size($row['acctoutputoctets']),
+      'downloaded' => ubercoova_format_size($row['acctinputoctets']),
+      'terminated' => $row['acctterminatecause'],
+    );
+  }
+  db_set_active();
+
+  $output  = theme('table', $header, $rows);
+  $output .= theme('pager', array(), 15);
+  return $output;
 }
 
 /**
