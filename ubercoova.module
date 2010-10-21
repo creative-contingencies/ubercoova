@@ -31,11 +31,11 @@ function ubercoova_menu() {
     'access arguments' => array(1),
     'type' => MENU_LOCAL_TASK,
   );
-  $items['user/%user/disconnect'] = array(
+  $items['admin/ubercoova/disconnect/%user'] = array(
     'title' => 'Disconnect',
     'description' => 'Disconnect user',
     'page callback' => 'ubercoova_user_disconnect',
-    'page arguments' => array(1),
+    'page arguments' => array(3),
     'access callback' => 'user_access',
     'access arguments' => array('disconnect users'),
     'type' => MENU_CALLBACK,
@@ -243,7 +243,7 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
         );
 
         // If user is online, add a way to KICK them.
-        if (user_access('disconnect users')) {
+        if (user_access('disconnect users') && variable_get('ubercoova_radclient', '')) {
 
           $account->content['hotspot'] = array(
             '#type' => 'user_profile_category',
@@ -261,7 +261,11 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
             $account->content['hotspot']['link'] = array(
               '#title' => t('Online'),
               '#type' => 'user_profile_item',
-              '#value' => t('User is online via NAS %nasname with secret %secret', array('%nasname' => $row['nasname'], '%secret' => $row['secret'])),
+              '#value' => t('User is online via NAS %nasname. !disconnect',
+                array(
+                  '%nasname' => $row['nasname'],
+                  '!disconnect' => l('Disconnect', 'admin/ubercoova/disconnect/' . $account->uid)
+                )),
             );
           }
           else {
@@ -297,7 +301,6 @@ function ubercoova_block($op = 'list', $delta = 0, $edit = array()) {
   switch ($op) {
     case 'list':
       $blocks = array();
-      $blocks[0]['info'] = t('UberCoova login block');
       $blocks[0]['info'] = t('UberCoova login block');
       return $blocks;
 
@@ -528,6 +531,106 @@ function theme_user_quota($quota) {
  */
 function ubercoova_user_disconnect($account) {
 
+  // Check if the user is online.
+  db_set_active('radius');
+  $result = db_query("SELECT n.nasname AS nasname, n.secret AS secret FROM nas AS n LEFT JOIN nasmap AS nm USING (nasname) INNER JOIN radacct r USING(nasipaddress) WHERE r.username = '%s' AND r.acctstoptime IS NULL", $account->name);
+  $row = db_fetch_array($result);
+  db_set_active();
+
+  if (empty($row)) {
+    return t('User is not online.');
+  }
+
+  // Generate a form and allow a confirm_form yes/no response.
+  return drupal_get_form('ubercoova_user_disconnect_form', $account, $row);
+
+}
+
+/**
+ * Confirm form to kick or not kick a user.
+ *
+ * @param $form_state
+ * @param $account
+ *   A valid suer object.
+ * @param $session
+ *   A keyed array containing coova session information.
+ */
+function ubercoova_user_disconnect_form($form_state, $account, $session) {
+  $form = array();
+
+  $form['#redirect'] = 'user/' . $account->uid;
+  $form['nasname'] = array(
+    '#type' => 'hidden',
+    '#value' => $session['nasname'],
+  );
+  $form['secret'] = array(
+    '#type' => 'hidden',
+    '#value' => $session['secret'],
+  );
+  $form['uid'] = array(
+    '#type' => 'hidden',
+    '#value' => $account->uid,
+  );
+  $form['username'] = array(
+    '#type' => 'hidden',
+    '#value' => $account->name,
+  );
+
+  return confirm_form(
+    $form,
+    t('Disconnect !user', array('!user' => $account->name)),
+    $form['#redirect'],
+    t('Do you really want disconnect !user from the internet? This will terminate all their transfers immediately.', array('!user' => $account->name)),
+    t('Disconnect'),
+    t('Do not disconnect')
+  );
+}
+
+/**
+ * Submit handler for the disconnect form.
+ *
+ * This calls radclient directly and feeds any output from stdout and stderr
+ * back to the user via drupal_set_message()
+ */
+function ubercoova_user_disconnect_form_submit($form, &$form_state) {
+
+  $radclient = variable_get('ubercoova_radclient', '');
+  if (empty($radclient) || !file_exists($radclient)) {
+    drupal_set_message(t('The radclient binary is not configured.'), 'error');
+    drupal_goto('user/' . $form_state['values']['uid']);
+    return;
+  }
+
+  $command = $radclient . ' ' . $form_state['values']['nasname'] . ':3799 disconnect "' . $form_state['values']['secret'] . '"';
+
+  $descriptors = array(
+    0 => array('pipe', 'r'), // stdin
+    1 => array('pipe', 'w'), // stdout
+    2 => array('pipe', 'w')  // stderr
+  ); 
+
+  $proc = proc_open($command, $descriptors, $pipes);
+  fwrite($pipes[0], 'User-Name = ' . $form_state['values']['username']);
+  fclose($pipes[0]);
+  
+  $output = stream_get_contents($pipes[1]);
+  fclose($pipes[1]);
+
+  $errors = stream_get_contents($pipes[2]);
+  fclose($pipes[2]);
+
+  $return = proc_close($proc);
+
+  if (!empty($output)) {
+    drupal_set_message($output);
+  }
+
+  if (!empty($errors)) {
+    drupal_set_message(t('Unable to disconnect user %user', array('%user' => $form_state['values']['username'])), 'error');
+    drupal_set_message($errors, 'error');
+  }
+
+  drupal_goto('user/' . $form_state['values']['uid']);
 }
 
 /**

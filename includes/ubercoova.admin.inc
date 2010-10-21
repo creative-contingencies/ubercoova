@@ -140,6 +140,13 @@ function ubercoova_settings() {
     '#default_value' => $table_ug,
   );
 
+  $form['ubercoova_radclient'] = array(
+    '#type' => 'textfield',
+    '#title' => 'RADIUS Client Binary',
+    '#description' => t('Enter the full path to the <em>radclient</em> binary. This can be used to disconnect hotspot users via the website.'),
+    '#default_value' => variable_get('ubercoova_radclient', ''),
+  );
+
   $options = array_merge(array(0 => '<none>'), user_roles(TRUE));
   $form['ubercoova_rid'] = array(
     '#type' => 'select',
@@ -217,5 +224,9 @@ function ubercoova_settings_validate(&$form, &$form_state) {
 
   if (!empty($form_state['values']['ubercoova_email_domain']) && (strpos($form_state['values']['ubercoova_email_domain'], '@') !== 0)) {
     form_set_error('email][ubercoova_email_domain', t('An email domain must start with an @ symbol.'));
+  }
+
+  if (!empty($form_state['values']['ubercoova_radclient']) && !file_exists($form_state['values']['ubercoova_radclient'])) {
+    form_set_error('ubercoova_radclient', t('The radclient binary does not exist in this location'));
   }
 }
