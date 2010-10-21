@@ -309,29 +309,28 @@ function ubercoova_block($op = 'list', $delta = 0, $edit = array()) {
       if ($delta == 0) {
         drupal_add_js(drupal_get_path('module', 'hotspot').'/ChilliLibrary.js');
         drupal_add_js(drupal_get_path('module', 'hotspot').'/chilliController.js');
-	drupal_add_js(_get_include_contents(drupal_get_path('module', 'hotspot').'/chillijs.php'), 'inline');
+        drupal_add_js(_get_include_contents(drupal_get_path('module', 'hotspot').'/chillijs.php'), 'inline');
 
-	/* We need this next block to set session variables regardless of which
-	 * page we land on.  The hotspot module only sets these if you land on
-	 * /hotspot, which is too restrictive.
-	*/
-	if (isset($_GET['uamip']) && isset($_GET['uamport'])) {
-	  $_SESSION['hotspot'] = 'true';
-	  $_SESSION['controller'] = 'chilli';
-	  $_SESSION['uamqs'] = $_SERVER['QUERY_STRING'];
-	  $_SESSION['logouturl'] = "http://".$_GET['uamip'].":".$_GET['uamport']."/logout";
-	  $_SESSION['loginurl'] = '';
-	  hotspot_set_session('ssl');
-	  hotspot_set_session('uamip');
-	  hotspot_set_session('uamport');
-	  hotspot_set_session('challenge');
-	  hotspot_set_session('userurl');
-	  hotspot_set_session('called');
-	  hotspot_set_session('mac');
-	  hotspot_set_session('res');
-
-	  hotspot_save_cookie();
-	} 
+	    // We need this next block to set session variables regardless of which
+	    // page we land on.  The hotspot module only sets these if you land on
+	    // /hotspot, which is too restrictive.
+        if (isset($_GET['uamip']) && isset($_GET['uamport'])) {
+          $_SESSION['hotspot'] = 'true';
+          $_SESSION['controller'] = 'chilli';
+          $_SESSION['uamqs'] = $_SERVER['QUERY_STRING'];
+          $_SESSION['logouturl'] = "http://".$_GET['uamip'].":".$_GET['uamport']."/logout";
+          $_SESSION['loginurl'] = '';
+          hotspot_set_session('ssl');
+          hotspot_set_session('uamip');
+          hotspot_set_session('uamport');
+          hotspot_set_session('challenge');
+          hotspot_set_session('userurl');
+          hotspot_set_session('called');
+          hotspot_set_session('mac');
+          hotspot_set_session('res');
+        
+          hotspot_save_cookie();
+        } 
 		  
         $block['subject'] = 'Internet Login';
         $block['content'] = drupal_get_form('ubercoova_login_form');
@@ -372,16 +371,16 @@ function ubercoova_block($op = 'list', $delta = 0, $edit = array()) {
 }
 
 function ubercoova_hotspot_gibberish() {
-return '<div id="statusPage" style="display:none;">
-  <table id="tableTab" cellpadding="0" cellspacing="0">
-    <tr>
-      <td class="navRow">
-	<table id="navTable" cellpadding="0" cellspacing="0" border="0" width="100%">
-	  <tr>
-	    <td class="tableTabFirst">&nbsp;</td>
-	    <td class="tableTabItem-selected" id="tabStatus" nowrap="nowrap" onClick="javascript:return statusTab(\'Status\');">Status</td>
-	    <td class="tableTabLast">&nbsp;</td>
-	  </tr>
+  return '<div id="statusPage" style="display:none;">
+    <table id="tableTab" cellpadding="0" cellspacing="0">
+      <tr>
+        <td class="navRow">
+  	<table id="navTable" cellpadding="0" cellspacing="0" border="0" width="100%">
+  	  <tr>
+  	    <td class="tableTabFirst">&nbsp;</td>
+  	    <td class="tableTabItem-selected" id="tabStatus" nowrap="nowrap" onClick="javascript:return statusTab(\'Status\');">Status</td>
+  	    <td class="tableTabLast">&nbsp;</td>
+  	  </tr>
 	</table>
       </td>
     </tr>
@@ -442,12 +441,11 @@ return '<div id="statusPage" style="display:none;">
       <td colspan="3" align="right" style="font-size: 8px;padding: 0px 2px 1px 0px;">Authentication services by <a href="http://www.coova.org/" target="_blank">coova</a>&nbsp;<a href="http://www.coova.org/" target="_blank"><span id="coova-icon"></span></a>&nbsp;</td>
     </tr>
   </table>
-</div>
+  </div>
 
-<div id="waitPage" style="display:none;">
-  Please wait...
-</div>
-';
+  <div id="waitPage" style="display:none;">
+    Please wait...
+  </div>';
 }
 
 /**
@@ -488,15 +486,6 @@ function ubercoova_login_form_validate($form, &$form_state) {
   if (empty($form_state['values']['password']))
     form_set_error('password', t('Please enter your password'));
 }
-
-/**
- * Return a login form that uses the hotspot javascript guff.
- */
-function ubercoova_login_form_submit($form, &$form_state) {
-  // dpm($form);
-  // dpm($form_state);
-}
-
 
 /**
  * Implementation of hook_theme().
@@ -639,7 +628,7 @@ function ubercoova_user_disconnect_form_submit($form, &$form_state) {
  * @param $account
  *   A valid user account.
  * @return
- *   A translated themed string.
+ *   A translated themed paged table.
  */
 function ubercoova_user_sessions($account) {
   drupal_set_title(t('Hotspot Sessions'));

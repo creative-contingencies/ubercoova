@@ -126,7 +126,7 @@ function ubercoova_settings() {
 
   $form['ubercoova_field_accounting'] = array(
     '#type' => 'select',
-    '#title' => 'RADIUS Accouting Table field',
+    '#title' => 'RADIUS Accounting Table field',
     '#description' => t('Select the %table_acct column that contains the downstream traffic (clients\' perspective) accounting data. This option is provided to adjust for the CoovaChilli swapoctets command.', array('%table_acct' => $table_acct)),
     '#options' => $fields_acct,
     '#default_value' => variable_get('ubercoova_field_accounting', ''),
