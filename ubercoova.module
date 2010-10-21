@@ -31,6 +31,15 @@ function ubercoova_menu() {
     'access arguments' => array(1),
     'type' => MENU_LOCAL_TASK,
   );
+  $items['user/%user/disconnect'] = array(
+    'title' => 'Disconnect',
+    'description' => 'Disconnect user',
+    'page callback' => 'ubercoova_user_disconnect',
+    'page arguments' => array(1),
+    'access callback' => 'user_access',
+    'access arguments' => array('disconnect users'),
+    'type' => MENU_CALLBACK,
+  );
   return $items;
 }
 
@@ -38,7 +47,7 @@ function ubercoova_menu() {
  * Implementation of hook_perm()
  */
 function ubercoova_perm() {
-  return array('administer ubercoova', 'edit user quota');
+  return array('administer ubercoova', 'edit user quota', 'disconnect users');
 }
 
 /**
@@ -227,10 +236,42 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
           '#weight' => -6,
           '#title' => t('Quota'),
           'link' => array(
+            '#title' => t('Remaining'),
             '#type' => 'user_profile_item',
             '#value' => theme('user_quota', $quota),
           ),
         );
+
+        // If user is online, add a way to KICK them.
+        if (user_access('disconnect users')) {
+
+          $account->content['hotspot'] = array(
+            '#type' => 'user_profile_category',
+            '#weight' => -7,
+            '#title' => t('Hotspot'),
+          );
+
+          // Check whether a user is online.
+          db_set_active('radius');
+          $result = db_query("SELECT n.nasname AS nasname, n.secret AS secret FROM nas AS n LEFT JOIN nasmap AS nm USING (nasname) INNER JOIN radacct r USING(nasipaddress) WHERE r.username = '%s' AND r.acctstoptime IS NULL", $account->name);
+          $row = db_fetch_array($result);
+          db_set_active();
+
+          if (!empty($row)) {
+            $account->content['hotspot']['link'] = array(
+              '#title' => t('Online'),
+              '#type' => 'user_profile_item',
+              '#value' => t('User is online via NAS %nasname with secret %secret', array('%nasname' => $row['nasname'], '%secret' => $row['secret'])),
+            );
+          }
+          else {
+            $account->content['hotspot']['link'] = array(
+              '#title' => t('Offline'),
+              '#type' => 'user_profile_item',
+              '#value' => t('User is not online.'),
+            );
+          }
+        }
 
         // There is an orders tab, no need to duplicate this.
         unset($account->content['orders']);
@@ -477,8 +518,15 @@ function theme_user_quota($quota) {
     return t("You don't have an Internet access account. To have one created speak to staff at your College.");
   }
   else {
-    return t('Your remaining quota is @quota.', array('@quota' => ubercoova_format_size($quota)));
+    return t('@quota.', array('@quota' => ubercoova_format_size($quota)));
   }
+}
+
+/**
+ * Callback to help disconnect a user's hotspot session.
+ */
+function ubercoova_user_disconnect($account) {
+
 }
 
 /**
@@ -490,7 +538,7 @@ function theme_user_quota($quota) {
  *   A translated themed string.
  */
 function ubercoova_user_sessions($account) {
-  drupal_set_title(t('Sessions'));
+  drupal_set_title(t('Hotspot Sessions'));
 
   $table_acct = variable_get('ubercoova_table_accounting', '');
   if (empty($table_acct)) {
