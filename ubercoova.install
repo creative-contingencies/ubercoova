@@ -33,6 +33,17 @@ function ubercoova_uninstall() {
   variable_del('ubercoova_table');
   variable_del('ubercoova_attribute_password');
   variable_del('ubercoova_attribute_quota');
+  variable_del('ubercoova_table_accounting');
+  variable_del('ubercoova_field_accounting');
+  variable_del('ubercoova_table_usergroup');
+  variable_del('ubercoova_email_uname');
+  variable_del('ubercoova_email_domain');
+  variable_del('ubercoova_email_modify');
+  variable_del('ubercoova_rid');
+  variable_del('ubercoova_login_redirect');
+  variable_del('ubercoova_radclient');
+  variable_del('ubercoova_cleanup');
+  variable_del('ubercoova_cleanup_tables');
 }
 
 /**
