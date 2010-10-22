@@ -31,13 +31,21 @@ function ubercoova_menu() {
     'access arguments' => array(1),
     'type' => MENU_LOCAL_TASK,
   );
-  $items['admin/ubercoova/disconnect/%user'] = array(
+  $items['admin/user/ubercoova'] = array(
+    'title' => 'Hotspot Sessions',
+    'description' => 'List current hotspot sessions',
+    'page callback' => 'ubercoova_sessions',
+    'access callback' => 'user_access',
+    'access arguments' => array('administer ubercoova'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['admin/user/ubercoova/disconnect/%user'] = array(
     'title' => 'Disconnect',
     'description' => 'Disconnect user',
     'page callback' => 'ubercoova_user_disconnect',
-    'page arguments' => array(3),
+    'page arguments' => array(4),
     'access callback' => 'user_access',
-    'access arguments' => array('disconnect users'),
+    'access arguments' => array('disconnect hotspot users'),
     'type' => MENU_CALLBACK,
   );
   return $items;
@@ -47,7 +55,7 @@ function ubercoova_menu() {
  * Implementation of hook_perm()
  */
 function ubercoova_perm() {
-  return array('administer ubercoova', 'edit user quota', 'disconnect users');
+  return array('administer ubercoova', 'edit user quota', 'disconnect hotspot users');
 }
 
 /**
@@ -264,7 +272,7 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
               '#value' => t('User is online via NAS %nasname. !disconnect',
                 array(
                   '%nasname' => $row['nasname'],
-                  '!disconnect' => l('Disconnect', 'admin/ubercoova/disconnect/' . $account->uid)
+                  '!disconnect' => l('Disconnect', 'admin/user/ubercoova/disconnect/' . $account->uid)
                 )),
             );
           }
@@ -620,6 +628,55 @@ function ubercoova_user_disconnect_form_submit($form, &$form_state) {
   }
 
   drupal_goto('user/' . $form_state['values']['uid']);
+}
+
+/**
+ * Function to list all active hotspot sessions. Not right as yet.
+ */
+function ubercoova_sessions() {
+  drupal_set_title(t('Active Hotspot Sessions'));
+
+  $table_acct = variable_get('ubercoova_table_accounting', '');
+  if (empty($table_acct)) {
+    return t('No active sessions.');
+  }
+
+  $header = array(
+    array('data' => t('Username'),          'field' => 'a.username'),
+    array('data' => t('Start'),             'field' => 'acctstarttime', 'sort' => 'desc'),
+    array('data' => t('IP Address'),        'field' => 'a.acctoutputoctets'),
+    array('data' => t('Uploaded'),          'field' => 'a.acctoutputoctets'),
+    array('data' => t('Downloaded'),        'field' => 'a.acctinputoctets'),
+  );
+
+  $query = 'SELECT a.username, UNIX_TIMESTAMP(a.acctstarttime) AS acctstarttime, a.acctoutputoctets, a.acctinputoctets, a.framedipaddress FROM ' . $table_acct . ' AS a WHERE a.acctstoptime IS NULL';
+  $query = $query . tablesort_sql($header);
+
+  db_set_active('radius');
+  $result = pager_query($query, 15, 0);
+  while ($row = db_fetch_array($result)) {
+    $rows[] = array(
+      'username' => $row['username'],
+      'start' => format_interval( (time() - $row['acctstarttime']), 1) . ' ago',
+      'address' => $row['framedipaddress'],
+      'uploaded' => ubercoova_format_size($row['acctoutputoctets']),
+      'downloaded' => ubercoova_format_size($row['acctinputoctets']),
+    );
+  }
+  db_set_active();
+
+  // This is less than ideal, but we cannot assume a hotspot users exists in Drupal.
+  // Loop through all found users and replace their names with a link if appropriate.
+  foreach($rows as $key => $row) {
+    $account = user_load(array('name' => $row['username']));
+    if ($account->uid > 0) {
+      $rows[$key]['username'] = theme('username', $account);
+    }
+  }
+
+  $output  = theme('table', $header, $rows);
+  $output .= theme('pager', array(), 15);
+  return $output;
 }
 
 /**
