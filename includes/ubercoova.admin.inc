@@ -35,6 +35,7 @@ function ubercoova_settings() {
   // Default table, saves us a db_switch later.
   $table = variable_get('ubercoova_table', '');
   $table_acct = variable_get('ubercoova_table_accounting', '');
+  $table_ug = variable_get('ubercoova_table_usergroup', '');
 
   // Switch to the radius database and check that the table exists. We re-do
   // this in case $db_url has changed,
@@ -42,17 +43,17 @@ function ubercoova_settings() {
   $table = db_table_exists($table) ? $table : '';
 
   // Create an option list of tables that we might want to use.
-  $options = array('' => t('<none>'));
+  $tables = array('' => t('<none>'));
   $result = db_query("SHOW TABLES");
   while ($row = db_result($result)) {
-    $options[$row] = $row;
+    $tables[$row] = $row;
   }
 
   $form['ubercoova_table'] = array(
     '#type' => 'select',
     '#title' => 'RADIUS Check Table',
     '#description' => t('Select the table that holds radius account and quota information for each user.'),
-    '#options' => $options,
+    '#options' => $tables,
     '#default_value' => $table,
   );
 
@@ -89,19 +90,20 @@ function ubercoova_settings() {
   );
 
   // Switch to the radius database and check that the table exists. Maybe this
-	// could be done above and the switch back to the default removed? Not
-	// familiar enough w/ drupal to know if this is courting disaster. LOOKS safe
-	// enough
+  // could be done above and the switch back to the default removed? Not
+  // familiar enough w/ drupal to know if this is courting disaster. LOOKS safe
+  // enough
   db_set_active('radius');
   $table_acct = db_table_exists($table_acct) ? $table_acct : '';
+  $table_ug = db_table_exists($table_ug) ? $table_ug : '';
   
   // We need to be able to get accounting info from radius to properly display
   // users' remaining quota on their account page.
   $form['ubercoova_table_accounting'] = array(
     '#type' => 'select',
     '#title' => 'RADIUS Accounting Table',
-    '#description' => t('Select the table that holds radius session accounting information for each user.'),
-    '#options' => $options,
+    '#description' => t('Select the table that holds RADIUS session accounting information for each user.'),
+    '#options' => $tables,
     '#default_value' => $table_acct,
   );
 
@@ -124,17 +126,32 @@ function ubercoova_settings() {
 
   $form['ubercoova_field_accounting'] = array(
     '#type' => 'select',
-    '#title' => 'RADIUS accouting table field',
+    '#title' => 'RADIUS Accounting Table field',
     '#description' => t('Select the %table_acct column that contains the downstream traffic (clients\' perspective) accounting data. This option is provided to adjust for the CoovaChilli swapoctets command.', array('%table_acct' => $table_acct)),
     '#options' => $fields_acct,
     '#default_value' => variable_get('ubercoova_field_accounting', ''),
+  );
+
+  $form['ubercoova_table_usergroup'] = array(
+    '#type' => 'select',
+    '#title' => 'RADIUS UserGroup Table',
+    '#description' => t('Select the table that holds RADIUS group information for users.'),
+    '#options' => $tables,
+    '#default_value' => $table_ug,
+  );
+
+  $form['ubercoova_radclient'] = array(
+    '#type' => 'textfield',
+    '#title' => 'RADIUS Client Binary',
+    '#description' => t('Enter the full path to the <em>radclient</em> binary. This can be used to disconnect hotspot users via the website.'),
+    '#default_value' => variable_get('ubercoova_radclient', ''),
   );
 
   $options = array_merge(array(0 => '<none>'), user_roles(TRUE));
   $form['ubercoova_rid'] = array(
     '#type' => 'select',
     '#title' => 'Assign Role',
-    '#description' => t('Assign this role to a Drupal user when it is transposed from the radius database.'),
+    '#description' => t('Assign this role to a Drupal user when it is newly created from the radius database.'),
     '#options' => $options,
     '#default_value' => variable_get('ubercoova_rid', 0),
   );
@@ -143,6 +160,13 @@ function ubercoova_settings() {
     '#type' => 'fieldset',
     '#title' => 'Email Settings',
     '#collapsible' => TRUE,
+    '#description' => t('These settings affect whether users are assigned email addresses when they are created in Drupal from RADIUS data.'),
+  );
+  $form['email']['ubercoova_email_uname'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Email Username',
+    '#description' => t('All users imported from RADIUS will be given this as their email username. You can leave this blank if you want to use the username imported from RADIUS.'),
+    '#default_value' => variable_get('ubercoova_email_uname', ''),
   );
   $form['email']['ubercoova_email_uname'] = array(
     '#type' => 'textfield',
@@ -163,6 +187,31 @@ function ubercoova_settings() {
     '#options' => array(0 => 'No', 1 => 'Yes'),
     '#default_value' => variable_get('ubercoova_email_modify', 0),
   );
+
+  $form['cleanup'] = array(
+    '#type' => 'fieldset',
+    '#title' => 'Cleanup Settings',
+    '#collapsible' => TRUE,
+    '#description' => t('These settings affect whether users are removed from RADIUS when they are deleted from Drupal.'),
+  );
+  $form['cleanup']['ubercoova_cleanup'] = array(
+    '#type' => 'radios',
+    '#title' => 'Cleanup',
+    '#description' => t('Delete users from RADIUS when they are deleted from Drupal?'),
+    '#options' => array(
+      0 => t('Leave user details in the RADIUS database.'),
+      1 => t('Delete all users details from the RADIUS database.'),
+    ),
+    '#default_value' => variable_get('ubercoova_cleanup', 0),
+  );
+  array_shift($tables);
+  $form['cleanup']['ubercoova_cleanup_tables'] = array(
+    '#type' => 'checkboxes',
+    '#title' => 'Cleanup Tables',
+    '#description' => t('Select all RADIUS tables that require cleanup when a user is deleted from Drupal. This will delete all their entries from the selected tables.'),
+    '#options' => $tables,
+    '#default_value' => variable_get('ubercoova_cleanup_tables', array()),
+  );
   
   return system_settings_form($form);
 }
@@ -181,5 +230,9 @@ function ubercoova_settings_validate(&$form, &$form_state) {
 
   if (!empty($form_state['values']['ubercoova_email_domain']) && (strpos($form_state['values']['ubercoova_email_domain'], '@') !== 0)) {
     form_set_error('email][ubercoova_email_domain', t('An email domain must start with an @ symbol.'));
+  }
+
+  if (!empty($form_state['values']['ubercoova_radclient']) && !file_exists($form_state['values']['ubercoova_radclient'])) {
+    form_set_error('ubercoova_radclient', t('The radclient binary does not exist in this location'));
   }
 }

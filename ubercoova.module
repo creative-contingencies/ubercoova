@@ -22,6 +22,32 @@ function ubercoova_menu() {
     'file' => 'includes/ubercoova.admin.inc',
     'type' => MENU_NORMAL_ITEM,
   );
+  $items['user/%user/sessions'] = array(
+    'title' => 'Sessions',
+    'description' => 'List recent sessions',
+    'page callback' => 'ubercoova_user_sessions',
+    'page arguments' => array(1),
+    'access callback' => 'user_view_access',
+    'access arguments' => array(1),
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/user/ubercoova'] = array(
+    'title' => 'Hotspot Sessions',
+    'description' => 'List current hotspot sessions',
+    'page callback' => 'ubercoova_sessions',
+    'access callback' => 'user_access',
+    'access arguments' => array('administer ubercoova'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['admin/user/ubercoova/disconnect/%user'] = array(
+    'title' => 'Disconnect',
+    'description' => 'Disconnect user',
+    'page callback' => 'ubercoova_user_disconnect',
+    'page arguments' => array(4),
+    'access callback' => 'user_access',
+    'access arguments' => array('disconnect hotspot users'),
+    'type' => MENU_CALLBACK,
+  );
   return $items;
 }
 
@@ -29,7 +55,7 @@ function ubercoova_menu() {
  * Implementation of hook_perm()
  */
 function ubercoova_perm() {
-  return array('administer ubercoova', 'edit user quota');
+  return array('administer ubercoova', 'edit user quota', 'disconnect hotspot users');
 }
 
 /**
@@ -45,7 +71,7 @@ function ubercoova_form_alter(&$form, $form_state, $form_id) {
       $form['#validate'] = is_array($form['#validate']) ? $form['#validate'] : array();
       // Our validate function *MUST* run first.
       array_unshift($form['#validate'], 'ubercoova_user_login_validate');
-    break;
+      break;
 
     case 'user_profile_form':
       // Hide the email field if the user isn't an administrator and email modification is disabled.
@@ -76,7 +102,6 @@ function ubercoova_user_login_validate($form, &$form_state) {
     // Grab some variables we need to query the radius database.
     $table = variable_get('ubercoova_table', '');
     $attribute = variable_get('ubercoova_attribute_password', '');
-    $rid = variable_get('ubercoova_rid', 0);
 
     db_set_active('radius');
     $row = db_fetch_array(db_query("SELECT username, value FROM %s WHERE LOWER(username) = LOWER('%s') AND attribute = '%s' AND op = '==' AND value = '%s'", $table, $form_state['values']['name'], $attribute, $form_state['values']['pass']));
@@ -103,13 +128,22 @@ function ubercoova_user_login_validate($form, &$form_state) {
           'name' => $form_state['values']['name'],
           'pass' => $form_state['values']['pass'],
           'mail' => $mail_addr,
-          'roles' => array_filter(array(DRUPAL_AUTHENTICATED_RID, $rid)),
+          'roles' => array_filter(array(DRUPAL_AUTHENTICATED_RID)),
           'status' => TRUE,
         );
+
         $new_user = user_save(
           new stdClass(),
           $user_attributes
         );
+
+        // If set, assign a given role.
+        $rid = variable_get('ubercoova_rid', 0);
+        if (!empty($rid)) {
+          $role = db_result(db_query("SELECT name FROM {role} WHERE rid = %d", $rid));
+          $roles = $new_user->roles + array($rid => $role);
+          user_save($new_user, array('roles' => $roles));
+        }
       }
       else  {
         db_query("UPDATE {users} SET pass = MD5('%s') WHERE uid = %d", $form_state['values']['pass'], $account->uid);
@@ -142,6 +176,41 @@ function ubercoova_profile_form_submit($form, &$form_state) {
       db_set_active();
     }
   }
+
+  $account = user_load(arg(1));
+
+  // Check if the selected form status is the same as the current user status.
+  if ($account->status != $form_state['values']['status']) {
+    $table = variable_get('ubercoova_table', '');
+    $table_ug = variable_get('ubercoova_table_usergroup', '');
+
+    if (empty($table) || empty($table_ug)) {
+      break;
+    }
+
+    switch ($form_state['values']['status']) {
+      case 0:
+        db_set_active('radius');
+        db_query("INSERT INTO " . $table . " (id, username, attribute, op, value) VALUES (0, '%s', 'Fall-Through', '=', 'yes')", $account->name);
+        db_query("INSERT INTO " . $table_ug . " (username, groupname, priority) VALUES ('%s', 'disabled', DEFAULT)", $account->name);
+        db_set_active();
+        break;
+
+      case 1:
+        db_set_active('radius');
+        db_query("DELETE FROM " . $table . " WHERE username = '%s' AND attribute = 'Fall-Through' AND op = '=' AND value = 'yes'", $account->name);
+        db_query("DELETE FROM " . $table_ug . " WHERE username = '%s' AND groupname = 'disabled'", $account->name);
+        db_set_active();
+        break;
+
+      default:
+        drupal_set_message(t('An unknown user status was detected. Not modifying RADIUS.'), 'warning');
+        break;
+    }
+  } // endif status changed.
+
+  // No need for this anymore, free it.
+  unset($account);
 }
 
 /**
@@ -158,30 +227,76 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
         $table = variable_get('ubercoova_table', '');
         $table_acct = variable_get('ubercoova_table_accounting', '');
         $field_acct = variable_get('ubercoova_field_accounting', '');
+
         db_set_active('radius');
         $quota = db_result(db_query("SELECT value FROM " . $table . " WHERE username = '%s' and attribute = '%s' AND op = ':='", $account->name, $attribute));
         $traffic = db_result(db_query("SELECT SUM(%s) FROM " . $table_acct . " WHERE username = '%s'", $field_acct, $account->name));
-	
         db_set_active();
 
-	if ($quota < $traffic) {
-	  $quota = 0;
-	} else {
-	  $quota -= $traffic;
-	}
+	    if ($quota < $traffic) {
+	      $quota = 0;
+	    } else {
+	      $quota -= $traffic;
+	    }
 
         $account->content['quota'] = array(
           '#type' => 'user_profile_category',
           '#weight' => -6,
           '#title' => t('Quota'),
           'link' => array(
+            '#title' => t('Remaining'),
             '#type' => 'user_profile_item',
             '#value' => theme('user_quota', $quota),
           ),
         );
 
+        // If user is online, add a way to KICK them.
+        if (user_access('disconnect users') && variable_get('ubercoova_radclient', '')) {
+
+          $account->content['hotspot'] = array(
+            '#type' => 'user_profile_category',
+            '#weight' => -7,
+            '#title' => t('Hotspot'),
+          );
+
+          // Check whether a user is online.
+          db_set_active('radius');
+          $result = db_query("SELECT n.nasname AS nasname, n.secret AS secret FROM nas AS n LEFT JOIN nasmap AS nm USING (nasname) INNER JOIN radacct r USING(nasipaddress) WHERE r.username = '%s' AND r.acctstoptime IS NULL", $account->name);
+          $row = db_fetch_array($result);
+          db_set_active();
+
+          if (!empty($row)) {
+            $account->content['hotspot']['link'] = array(
+              '#title' => t('Online'),
+              '#type' => 'user_profile_item',
+              '#value' => t('User is online via NAS %nasname. !disconnect',
+                array(
+                  '%nasname' => $row['nasname'],
+                  '!disconnect' => l('Disconnect', 'admin/user/ubercoova/disconnect/' . $account->uid)
+                )),
+            );
+          }
+          else {
+            $account->content['hotspot']['link'] = array(
+              '#title' => t('Offline'),
+              '#type' => 'user_profile_item',
+              '#value' => t('User is not online.'),
+            );
+          }
+        }
+
         // There is an orders tab, no need to duplicate this.
         unset($account->content['orders']);
+      }
+      break;
+
+    // User is being deleted. Also delete them from RADIUS.
+    case 'delete':
+     if (variable_get('ubercoova_cleanup', 0)) {
+       $tables = array_filter(variable_get('ubercoova_cleanup_tables', array()));
+       foreach ($tables as $table) {
+         db_query("DELETE FROM " . check_plain($table) . " WHERE username = '%s'", $account->name);
+       }
       }
       break;
   }
@@ -202,29 +317,28 @@ function ubercoova_block($op = 'list', $delta = 0, $edit = array()) {
       if ($delta == 0) {
         drupal_add_js(drupal_get_path('module', 'hotspot').'/ChilliLibrary.js');
         drupal_add_js(drupal_get_path('module', 'hotspot').'/chilliController.js');
-	drupal_add_js(_get_include_contents(drupal_get_path('module', 'hotspot').'/chillijs.php'), 'inline');
+        drupal_add_js(_get_include_contents(drupal_get_path('module', 'hotspot').'/chillijs.php'), 'inline');
 
-	/* We need this next block to set session variables regardless of which
-	 * page we land on.  The hotspot module only sets these if you land on
-	 * /hotspot, which is too restrictive.
-	*/
-	if (isset($_GET['uamip']) && isset($_GET['uamport'])) {
-	  $_SESSION['hotspot'] = 'true';
-	  $_SESSION['controller'] = 'chilli';
-	  $_SESSION['uamqs'] = $_SERVER['QUERY_STRING'];
-	  $_SESSION['logouturl'] = "http://".$_GET['uamip'].":".$_GET['uamport']."/logout";
-	  $_SESSION['loginurl'] = '';
-	  hotspot_set_session('ssl');
-	  hotspot_set_session('uamip');
-	  hotspot_set_session('uamport');
-	  hotspot_set_session('challenge');
-	  hotspot_set_session('userurl');
-	  hotspot_set_session('called');
-	  hotspot_set_session('mac');
-	  hotspot_set_session('res');
-
-	  hotspot_save_cookie();
-	} 
+	    // We need this next block to set session variables regardless of which
+	    // page we land on.  The hotspot module only sets these if you land on
+	    // /hotspot, which is too restrictive.
+        if (isset($_GET['uamip']) && isset($_GET['uamport'])) {
+          $_SESSION['hotspot'] = 'true';
+          $_SESSION['controller'] = 'chilli';
+          $_SESSION['uamqs'] = $_SERVER['QUERY_STRING'];
+          $_SESSION['logouturl'] = "http://".$_GET['uamip'].":".$_GET['uamport']."/logout";
+          $_SESSION['loginurl'] = '';
+          hotspot_set_session('ssl');
+          hotspot_set_session('uamip');
+          hotspot_set_session('uamport');
+          hotspot_set_session('challenge');
+          hotspot_set_session('userurl');
+          hotspot_set_session('called');
+          hotspot_set_session('mac');
+          hotspot_set_session('res');
+        
+          hotspot_save_cookie();
+        } 
 		  
         $block['subject'] = 'Internet Login';
         $block['content'] = drupal_get_form('ubercoova_login_form');
@@ -265,16 +379,16 @@ function ubercoova_block($op = 'list', $delta = 0, $edit = array()) {
 }
 
 function ubercoova_hotspot_gibberish() {
-return '<div id="statusPage" style="display:none;">
-  <table id="tableTab" cellpadding="0" cellspacing="0">
-    <tr>
-      <td class="navRow">
-	<table id="navTable" cellpadding="0" cellspacing="0" border="0" width="100%">
-	  <tr>
-	    <td class="tableTabFirst">&nbsp;</td>
-	    <td class="tableTabItem-selected" id="tabStatus" nowrap="nowrap" onClick="javascript:return statusTab(\'Status\');">Status</td>
-	    <td class="tableTabLast">&nbsp;</td>
-	  </tr>
+  return '<div id="statusPage" style="display:none;">
+    <table id="tableTab" cellpadding="0" cellspacing="0">
+      <tr>
+        <td class="navRow">
+  	<table id="navTable" cellpadding="0" cellspacing="0" border="0" width="100%">
+  	  <tr>
+  	    <td class="tableTabFirst">&nbsp;</td>
+  	    <td class="tableTabItem-selected" id="tabStatus" nowrap="nowrap" onClick="javascript:return statusTab(\'Status\');">Status</td>
+  	    <td class="tableTabLast">&nbsp;</td>
+  	  </tr>
 	</table>
       </td>
     </tr>
@@ -335,12 +449,11 @@ return '<div id="statusPage" style="display:none;">
       <td colspan="3" align="right" style="font-size: 8px;padding: 0px 2px 1px 0px;">Authentication services by <a href="http://www.coova.org/" target="_blank">coova</a>&nbsp;<a href="http://www.coova.org/" target="_blank"><span id="coova-icon"></span></a>&nbsp;</td>
     </tr>
   </table>
-</div>
+  </div>
 
-<div id="waitPage" style="display:none;">
-  Please wait...
-</div>
-';
+  <div id="waitPage" style="display:none;">
+    Please wait...
+  </div>';
 }
 
 /**
@@ -383,15 +496,6 @@ function ubercoova_login_form_validate($form, &$form_state) {
 }
 
 /**
- * Return a login form that uses the hotspot javascript guff.
- */
-function ubercoova_login_form_submit($form, &$form_state) {
-  dpm($form);
-  dpm($form_state);
-}
-
-
-/**
  * Implementation of hook_theme().
  */
 function ubercoova_theme() {
@@ -415,8 +519,211 @@ function theme_user_quota($quota) {
     return t("You don't have an Internet access account. To have one created speak to staff at your College.");
   }
   else {
-    return t('Your remaining quota is @quota.', array('@quota' => ubercoova_format_size($quota)));
+    return t('@quota.', array('@quota' => ubercoova_format_size($quota)));
   }
+}
+
+/**
+ * Callback to help disconnect a user's hotspot session.
+ */
+function ubercoova_user_disconnect($account) {
+
+  // Check if the user is online.
+  db_set_active('radius');
+  $result = db_query("SELECT n.nasname AS nasname, n.secret AS secret FROM nas AS n LEFT JOIN nasmap AS nm USING (nasname) INNER JOIN radacct r USING(nasipaddress) WHERE r.username = '%s' AND r.acctstoptime IS NULL", $account->name);
+  $row = db_fetch_array($result);
+  db_set_active();
+
+  if (empty($row)) {
+    return t('User is not online.');
+  }
+
+  // Generate a form and allow a confirm_form yes/no response.
+  return drupal_get_form('ubercoova_user_disconnect_form', $account, $row);
+
+}
+
+/**
+ * Confirm form to kick or not kick a user.
+ *
+ * @param $form_state
+ * @param $account
+ *   A valid suer object.
+ * @param $session
+ *   A keyed array containing coova session information.
+ */
+function ubercoova_user_disconnect_form($form_state, $account, $session) {
+  $form = array();
+
+  $form['#redirect'] = 'user/' . $account->uid;
+  $form['nasname'] = array(
+    '#type' => 'hidden',
+    '#value' => $session['nasname'],
+  );
+  $form['secret'] = array(
+    '#type' => 'hidden',
+    '#value' => $session['secret'],
+  );
+  $form['uid'] = array(
+    '#type' => 'hidden',
+    '#value' => $account->uid,
+  );
+  $form['username'] = array(
+    '#type' => 'hidden',
+    '#value' => $account->name,
+  );
+
+  return confirm_form(
+    $form,
+    t('Disconnect !user', array('!user' => $account->name)),
+    $form['#redirect'],
+    t('Do you really want disconnect !user from the internet? This will terminate all their transfers immediately.', array('!user' => $account->name)),
+    t('Disconnect'),
+    t('Do not disconnect')
+  );
+}
+
+/**
+ * Submit handler for the disconnect form.
+ *
+ * This calls radclient directly and feeds any output from stdout and stderr
+ * back to the user via drupal_set_message()
+ */
+function ubercoova_user_disconnect_form_submit($form, &$form_state) {
+
+  $radclient = variable_get('ubercoova_radclient', '');
+  if (empty($radclient) || !file_exists($radclient)) {
+    drupal_set_message(t('The radclient binary is not configured.'), 'error');
+    drupal_goto('user/' . $form_state['values']['uid']);
+    return;
+  }
+
+  $command = $radclient . ' ' . $form_state['values']['nasname'] . ':3799 disconnect "' . $form_state['values']['secret'] . '"';
+
+  $descriptors = array(
+    0 => array('pipe', 'r'), // stdin
+    1 => array('pipe', 'w'), // stdout
+    2 => array('pipe', 'w')  // stderr
+  ); 
+
+  $proc = proc_open($command, $descriptors, $pipes);
+  fwrite($pipes[0], 'User-Name = ' . $form_state['values']['username']);
+  fclose($pipes[0]);
+  
+  $output = stream_get_contents($pipes[1]);
+  fclose($pipes[1]);
+
+  $errors = stream_get_contents($pipes[2]);
+  fclose($pipes[2]);
+
+  $return = proc_close($proc);
+
+  if (!empty($output)) {
+    drupal_set_message($output);
+  }
+
+  if (!empty($errors)) {
+    drupal_set_message(t('Unable to disconnect user %user', array('%user' => $form_state['values']['username'])), 'error');
+    drupal_set_message($errors, 'error');
+  }
+
+  drupal_goto('user/' . $form_state['values']['uid']);
+}
+
+/**
+ * Function to list all active hotspot sessions. Not right as yet.
+ */
+function ubercoova_sessions() {
+  drupal_set_title(t('Active Hotspot Sessions'));
+
+  $table_acct = variable_get('ubercoova_table_accounting', '');
+  if (empty($table_acct)) {
+    return t('No active sessions.');
+  }
+
+  $header = array(
+    array('data' => t('Username'),          'field' => 'a.username'),
+    array('data' => t('Start'),             'field' => 'acctstarttime', 'sort' => 'desc'),
+    array('data' => t('IP Address'),        'field' => 'a.acctoutputoctets'),
+    array('data' => t('Uploaded'),          'field' => 'a.acctoutputoctets'),
+    array('data' => t('Downloaded'),        'field' => 'a.acctinputoctets'),
+  );
+
+  $query = 'SELECT a.username, UNIX_TIMESTAMP(a.acctstarttime) AS acctstarttime, a.acctoutputoctets, a.acctinputoctets, a.framedipaddress FROM ' . $table_acct . ' AS a WHERE a.acctstoptime IS NULL';
+  $query = $query . tablesort_sql($header);
+
+  db_set_active('radius');
+  $result = pager_query($query, 15, 0);
+  while ($row = db_fetch_array($result)) {
+    $rows[] = array(
+      'username' => $row['username'],
+      'start' => format_interval( (time() - $row['acctstarttime']), 1) . ' ago',
+      'address' => $row['framedipaddress'],
+      'uploaded' => ubercoova_format_size($row['acctoutputoctets']),
+      'downloaded' => ubercoova_format_size($row['acctinputoctets']),
+    );
+  }
+  db_set_active();
+
+  // This is less than ideal, but we cannot assume a hotspot users exists in Drupal.
+  // Loop through all found users and replace their names with a link if appropriate.
+  foreach($rows as $key => $row) {
+    $account = user_load(array('name' => $row['username']));
+    if ($account->uid > 0) {
+      $rows[$key]['username'] = theme('username', $account);
+    }
+  }
+
+  $output  = theme('table', $header, $rows);
+  $output .= theme('pager', array(), 15);
+  return $output;
+}
+
+/**
+ * Function to display recent sessions on the /user/%/sessions page.
+ *
+ * @param $account
+ *   A valid user account.
+ * @return
+ *   A translated themed paged table.
+ */
+function ubercoova_user_sessions($account) {
+  drupal_set_title(t('Hotspot Sessions'));
+
+  $table_acct = variable_get('ubercoova_table_accounting', '');
+  if (empty($table_acct)) {
+    return t('No recent sessions.');
+  }
+
+  $header = array(
+    array('data' => t('Start'),             'field' => 'acctstarttime', 'sort' => 'desc'),
+    array('data' => t('Finish'),            'field' => 'acctstoptime'),
+    array('data' => t('IP Address'),        'field' => 'framedipaddress'),
+    array('data' => t('Uploaded'),          'field' => 'acctoutputoctets'),
+    array('data' => t('Downloaded'),        'field' => 'acctinputoctets'),
+    array('data' => t('Termination Cause'), 'field' => 'acctterminatecause'),
+  );
+
+  $query = "SELECT acctstarttime, acctstoptime, framedipaddress, acctoutputoctets, acctinputoctets, acctterminatecause FROM " . $table_acct . " WHERE username = '" .  check_plain($account->name) ."'";
+  $query = $query . tablesort_sql($header);
+
+  db_set_active('radius');
+  $result = pager_query($query, 15, 0);
+  while ($row = db_fetch_array($result)) {
+    $rows[] = array(
+      'start' => $row['acctstarttime'],
+      'finish' => $row['acctstoptime'],
+      'address' => $row['framedipaddress'],
+      'uploaded' => ubercoova_format_size($row['acctoutputoctets']),
+      'downloaded' => ubercoova_format_size($row['acctinputoctets']),
+      'terminated' => $row['acctterminatecause'],
+    );
+  }
+  db_set_active();
+
+  $output  = theme('table', $header, $rows);
+  $output .= theme('pager', array(), 15);
+  return $output;
 }
 
 /**
