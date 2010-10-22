@@ -648,6 +648,7 @@ function ubercoova_sessions() {
     array('data' => t('Uploaded'),          'field' => 'a.acctoutputoctets'),
     array('data' => t('Downloaded'),        'field' => 'a.acctinputoctets'),
   );
+  $rows = array();
 
   $query = 'SELECT a.username, UNIX_TIMESTAMP(a.acctstarttime) AS acctstarttime, a.acctoutputoctets, a.acctinputoctets, a.framedipaddress FROM ' . $table_acct . ' AS a WHERE a.acctstoptime IS NULL';
   $query = $query . tablesort_sql($header);
@@ -672,6 +673,10 @@ function ubercoova_sessions() {
     if ($account->uid > 0) {
       $rows[$key]['username'] = theme('username', $account);
     }
+  }
+
+  if (empty($rows)) {
+    return t('There are no active sessions.');
   }
 
   $output  = theme('table', $header, $rows);
