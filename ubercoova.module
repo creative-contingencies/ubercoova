@@ -104,7 +104,7 @@ function ubercoova_user_login_validate($form, &$form_state) {
     $attribute = variable_get('ubercoova_attribute_password', '');
 
     db_set_active('radius');
-    $row = db_fetch_array(db_query("SELECT username, value FROM %s WHERE LOWER(username) = LOWER('%s') AND attribute = '%s' AND op = '==' AND value = '%s'", $table, $form_state['values']['name'], $attribute, $form_state['values']['pass']));
+    $row = db_fetch_array(db_query("SELECT username, value FROM %s WHERE LOWER(username) = LOWER('%s') AND attribute = '%s' AND op = ':=' AND value = '%s'", $table, $form_state['values']['name'], $attribute, $form_state['values']['pass']));
     db_set_active();
 
     if (!empty($row)) {
