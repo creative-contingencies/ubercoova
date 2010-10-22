@@ -147,12 +147,13 @@ function ubercoova_settings() {
     '#default_value' => variable_get('ubercoova_radclient', ''),
   );
 
-  $options = array_merge(array(0 => '<none>'), user_roles(TRUE));
+  $roles = array(0 => '<none>');
+  $roles += user_roles(TRUE);
   $form['ubercoova_rid'] = array(
     '#type' => 'select',
     '#title' => 'Assign Role',
     '#description' => t('Assign this role to a Drupal user when it is newly created from the radius database.'),
-    '#options' => $options,
+    '#options' => $roles,
     '#default_value' => variable_get('ubercoova_rid', 0),
   );
 

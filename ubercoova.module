@@ -130,7 +130,7 @@ function ubercoova_user_login_validate($form, &$form_state) {
           'name' => $form_state['values']['name'],
           'pass' => $form_state['values']['pass'],
           'mail' => $mail_addr,
-          'roles' => array_filter(array(DRUPAL_AUTHENTICATED_RID)),
+          'roles' => array(DRUPAL_AUTHENTICATED_RID),
           'status' => TRUE,
         );
 
@@ -178,41 +178,126 @@ function ubercoova_profile_form_submit($form, &$form_state) {
       db_set_active();
     }
   }
+}
 
-  $account = user_load(arg(1));
+/**
+ * Helper to toggle the user blocked status in RADIUS.
+ *
+ * @param $account
+ *   A valid user object.
+ * @param $status
+ *   The new account status (int)
+ */
+function ubercoova_toggle_user_status($account, $status) {
 
-  // Check if the selected form status is the same as the current user status.
-  if ($account->status != $form_state['values']['status']) {
-    $table = variable_get('ubercoova_table', '');
-    $table_ug = variable_get('ubercoova_table_usergroup', '');
+  $table = variable_get('ubercoova_table', '');
+  $table_ug = variable_get('ubercoova_table_usergroup', '');
 
-    if (empty($table) || empty($table_ug)) {
+  if (empty($table) || empty($table_ug)) {
+    return;
+  }
+
+  // Unfortunately drupal_set_message() appears to need the main database, so the db_set_active()
+  // calls must be inside each case statement.
+  switch ($status) {
+    case 0:
+      db_set_active('radius');
+      db_query("INSERT INTO " . $table . " (id, username, attribute, op, value) VALUES (0, '%s', 'Fall-Through', '=', 'yes')", $account->name);
+      db_query("INSERT INTO " . $table_ug . " (username, groupname, priority) VALUES ('%s', 'disabled', DEFAULT)", $account->name);
+      db_set_active();
       break;
-    }
 
-    switch ($form_state['values']['status']) {
-      case 0:
-        db_set_active('radius');
-        db_query("INSERT INTO " . $table . " (id, username, attribute, op, value) VALUES (0, '%s', 'Fall-Through', '=', 'yes')", $account->name);
-        db_query("INSERT INTO " . $table_ug . " (username, groupname, priority) VALUES ('%s', 'disabled', DEFAULT)", $account->name);
-        db_set_active();
-        break;
+    case 1:
+      db_set_active('radius');
+      db_query("DELETE FROM " . $table . " WHERE username = '%s' AND attribute = 'Fall-Through' AND op = '=' AND value = 'yes'", $account->name);
+      db_query("DELETE FROM " . $table_ug . " WHERE username = '%s' AND groupname = 'disabled'", $account->name);
+      db_set_active();
+      break;
 
-      case 1:
-        db_set_active('radius');
-        db_query("DELETE FROM " . $table . " WHERE username = '%s' AND attribute = 'Fall-Through' AND op = '=' AND value = 'yes'", $account->name);
-        db_query("DELETE FROM " . $table_ug . " WHERE username = '%s' AND groupname = 'disabled'", $account->name);
-        db_set_active();
-        break;
+    default:
+      drupal_set_message(t('An unknown user status was detected. Not modifying RADIUS.'), 'warning');
+      break;
+  }
+}
 
-      default:
-        drupal_set_message(t('An unknown user status was detected. Not modifying RADIUS.'), 'warning');
-        break;
-    }
-  } // endif status changed.
+/**
+ * Helper to make a quota panel on the user profile page.
+ *
+ * @param $account.
+ *   A valid user object.
+ * @return
+ *   A keyed array profile panel.
+ */
+function ubercoova_user_quota_panel($account) {
+  $attribute = variable_get('ubercoova_attribute_quota', '');
+  $table = variable_get('ubercoova_table', '');
+  $table_acct = variable_get('ubercoova_table_accounting', '');
+  $field_acct = variable_get('ubercoova_field_accounting', '');
 
-  // No need for this anymore, free it.
-  unset($account);
+  db_set_active('radius');
+  $quota = db_result(db_query("SELECT value FROM " . $table . " WHERE username = '%s' and attribute = '%s' AND op = ':='", $account->name, $attribute));
+  $traffic = db_result(db_query("SELECT SUM(%s) FROM " . $table_acct . " WHERE username = '%s'", $field_acct, $account->name));
+  db_set_active();
+
+  if ($quota < $traffic) {
+    $quota = 0;
+  } else {
+    $quota -= $traffic;
+  }
+
+  return array(
+    '#type' => 'user_profile_category',
+    '#weight' => -6,
+    '#title' => t('Quota'),
+    'link' => array(
+      '#title' => t('Remaining'),
+      '#type' => 'user_profile_item',
+      '#value' => theme('user_quota', $quota),
+    ),
+  );
+}
+
+/**
+ * Helper to make a hotspot session status panel on the user profile page.
+ *
+ * @param $account.
+ *   A valid user object.
+ * @return
+ *   A keyed array profile panel.
+ */
+function ubercoova_user_hotspot_panel($account) {
+
+  // Check whether a user is online.
+  db_set_active('radius');
+  $result = db_query("SELECT n.nasname AS nasname, n.secret AS secret FROM nas AS n LEFT JOIN nasmap AS nm USING (nasname) INNER JOIN radacct r USING(nasipaddress) WHERE r.username = '%s' AND r.acctstoptime IS NULL", $account->name);
+  $row = db_fetch_array($result);
+  db_set_active();
+
+  if (!empty($row)) {
+    $link = array(
+      '#title' => t('Online'),
+      '#type' => 'user_profile_item',
+      '#value' => t('User is online via NAS %nasname. !disconnect',
+        array(
+          '%nasname' => $row['nasname'],
+          '!disconnect' => l('Disconnect', 'admin/user/ubercoova/disconnect/' . $account->uid)
+        )),
+      );
+  }
+  else {
+    $link = array(
+      '#title' => t('Offline'),
+      '#type' => 'user_profile_item',
+      '#value' => t('User is not online.'),
+    );
+  }
+
+  return array(
+    '#type' => 'user_profile_category',
+    '#weight' => -7,
+    '#title' => t('Hotspot'),
+    'link' => $link,
+  );
 }
 
 /**
@@ -225,70 +310,24 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
   switch($op) {
     case 'view':
       if ($user->uid && (($user->uid == $account->uid) || user_access('access user profiles'))) {
-        $attribute = variable_get('ubercoova_attribute_quota', '');
-        $table = variable_get('ubercoova_table', '');
-        $table_acct = variable_get('ubercoova_table_accounting', '');
-        $field_acct = variable_get('ubercoova_field_accounting', '');
-
-        db_set_active('radius');
-        $quota = db_result(db_query("SELECT value FROM " . $table . " WHERE username = '%s' and attribute = '%s' AND op = ':='", $account->name, $attribute));
-        $traffic = db_result(db_query("SELECT SUM(%s) FROM " . $table_acct . " WHERE username = '%s'", $field_acct, $account->name));
-        db_set_active();
-
-	    if ($quota < $traffic) {
-	      $quota = 0;
-	    } else {
-	      $quota -= $traffic;
-	    }
-
-        $account->content['quota'] = array(
-          '#type' => 'user_profile_category',
-          '#weight' => -6,
-          '#title' => t('Quota'),
-          'link' => array(
-            '#title' => t('Remaining'),
-            '#type' => 'user_profile_item',
-            '#value' => theme('user_quota', $quota),
-          ),
-        );
+        // Show the remaining quota.
+        $account->content['quota'] = ubercoova_user_quota_panel($account);
 
         // If user is online, add a way to KICK them.
-        if (user_access('disconnect users') && variable_get('ubercoova_radclient', '')) {
-
-          $account->content['hotspot'] = array(
-            '#type' => 'user_profile_category',
-            '#weight' => -7,
-            '#title' => t('Hotspot'),
-          );
-
-          // Check whether a user is online.
-          db_set_active('radius');
-          $result = db_query("SELECT n.nasname AS nasname, n.secret AS secret FROM nas AS n LEFT JOIN nasmap AS nm USING (nasname) INNER JOIN radacct r USING(nasipaddress) WHERE r.username = '%s' AND r.acctstoptime IS NULL", $account->name);
-          $row = db_fetch_array($result);
-          db_set_active();
-
-          if (!empty($row)) {
-            $account->content['hotspot']['link'] = array(
-              '#title' => t('Online'),
-              '#type' => 'user_profile_item',
-              '#value' => t('User is online via NAS %nasname. !disconnect',
-                array(
-                  '%nasname' => $row['nasname'],
-                  '!disconnect' => l('Disconnect', 'admin/user/ubercoova/disconnect/' . $account->uid)
-                )),
-            );
-          }
-          else {
-            $account->content['hotspot']['link'] = array(
-              '#title' => t('Offline'),
-              '#type' => 'user_profile_item',
-              '#value' => t('User is not online.'),
-            );
-          }
+        if (user_access('disconnect hotspot users') && variable_get('ubercoova_radclient', '')) {
+          $account->content['hotspot'] = ubercoova_user_hotspot_panel($account);
         }
+      }
 
-        // There is an orders tab, no need to duplicate this.
-        unset($account->content['orders']);
+      // There is an orders tab, no need to duplicate this.
+      unset($account->content['orders']);
+      break;
+
+    // Check if the user being saved has a changed status. If so, also change status in RADIUS.
+    // By doing this here and not in a form handler, it'll work even with advuser etc.
+    case 'update':
+      if ($edit['status'] != $account->status) {
+        ubercoova_toggle_user_status($account, $edit['status']);
       }
       break;
 
