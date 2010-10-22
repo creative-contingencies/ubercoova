@@ -81,7 +81,9 @@ function ubercoova_form_alter(&$form, $form_state, $form_id) {
       }
       // Append our own submit handler.
       $form['#submit'] = is_array($form['#submit']) ? $form['#submit'] : array();
-      $form['#submit'][] = 'ubercoova_profile_form_submit';
+      // Our submit function must run first or the user's account status will
+      // get updated first and then our check if their status is changing fails
+      array_unshift($form['#submit'], 'ubercoova_profile_form_submit');
       break;
   }
 }
@@ -172,7 +174,7 @@ function ubercoova_profile_form_submit($form, &$form_state) {
 
     if (!empty($password_attribute)) {
       db_set_active('radius');
-      db_query("UPDATE %s SET value = '%s' WHERE username = '%s' AND attribute = '%s' AND op = '=='", $table, $form_state['values']['pass'], $name, $password_attribute);
+      db_query("UPDATE %s SET value = '%s' WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $form_state['values']['pass'], $name, $password_attribute);
       db_set_active();
     }
   }
