@@ -335,11 +335,13 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
     case 'delete':
      if (variable_get('ubercoova_cleanup', 0)) {
        $tables = array_filter(variable_get('ubercoova_cleanup_tables', array()));
+       db_set_active('radius');
        foreach ($tables as $table) {
          db_query("DELETE FROM " . check_plain($table) . " WHERE username = '%s'", $account->name);
        }
-      }
-      break;
+     db_set_active(); 
+     }
+     break;
   }
 }
 
