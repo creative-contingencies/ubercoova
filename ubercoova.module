@@ -322,7 +322,7 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
         $account->content['quota'] = ubercoova_user_quota_panel($account);
 
         // If user is online, add a way to KICK them.
-        if (user_access('disconnect hotspot users') && variable_get('ubercoova_radclient', '')) {
+        if (($user->uid && ($user->uid == $account->uid) || user_access('disconnect hotspot users')) && variable_get('ubercoova_radclient', '')) {
           $account->content['hotspot'] = ubercoova_user_hotspot_panel($account);
         }
       }
