@@ -192,16 +192,14 @@ function ubercoova_toggle_user_status($account, $status) {
 
   $table = variable_get('ubercoova_table', '');
   $table_ug = variable_get('ubercoova_table_usergroup', '');
-  $uc_rid = variable_get('ubercoova_rid', '');
 
-  if (empty($table) || empty($table_ug) || empty($uc_rid)) {
+  if (empty($table) || empty($table_ug)) {
     return;
   }
   
   // We only want to do this stuff if the user has the ubercoova radius user role
   // If we don't do this check then e.g. LDAP users spam entries into the radius db
-  $check = array_intersect(array($uc_rid), array_values($account->roles));
-  if (empty($check)) {
+  if (!array_key_exists(variable_get('ubercoova_rid', ''), $account->roles)) {
     return;
   }
 
