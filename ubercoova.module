@@ -246,9 +246,9 @@ function ubercoova_user_quota_panel($account) {
   db_set_active();
 
   if ($quota < $traffic) {
-    $quota = 0;
+    $quota_rem = 0;
   } else {
-    $quota -= $traffic;
+    $quota_rem = $quota - $traffic;
   }
 
   return array(
@@ -258,7 +258,7 @@ function ubercoova_user_quota_panel($account) {
     'link' => array(
       '#title' => t('Remaining'),
       '#type' => 'user_profile_item',
-      '#value' => theme('user_quota', $quota),
+      '#value' => theme('user_quota', $quota, $quota_rem),
     ),
   );
 }
@@ -559,16 +559,18 @@ function ubercoova_theme() {
  * Theme function to display the quota on the /user/% page.
  *
  * @param $quota
+ *   The raw value from the DB query, could be a bool.
+ * @param $quota_rem
  *   A quota in bytes.
  * @return
  *   A translated themed string.
  */
-function theme_user_quota($quota) {
-  if (empty($quota)) {
-    return t("You don't have an Internet access account. To have one created speak to staff at your College.");
+function theme_user_quota($quota, $quota_rem) {
+  if ($quota === FALSE) {
+    return t("You either don't have an Internet access account, or you have a post paid account. To have an account created speak to staff at your College.");
   }
   else {
-    return t('@quota.', array('@quota' => ubercoova_format_size($quota)));
+    return t('@quota_rem.', array('@quota_rem' => ubercoova_format_size($quota_rem)));
   }
 }
 
