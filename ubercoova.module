@@ -627,6 +627,14 @@ function theme_user_quota($quota, $quota_rem) {
  */
 function ubercoova_user_disconnect($account) {
 
+  // Do an extra permission check so users can't just enter the magic URL and kick users off.
+  // Early return on fail.
+  global $user;
+  if ( !($user->uid == $account->uid && user_access('disconnect own hotspot session'))
+       || !user_access('disconnect all hotspot sessions')) {
+    return;
+  }
+
   // Check if the user is online.
   db_set_active('radius');
   $result = db_query("SELECT n.nasname AS nasname, n.secret AS secret FROM nas AS n LEFT JOIN nasmap AS nm USING (nasname) INNER JOIN radacct r USING(nasipaddress) WHERE r.username = '%s' AND r.acctstoptime IS NULL", $account->name);
