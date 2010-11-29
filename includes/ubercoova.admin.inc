@@ -157,6 +157,28 @@ function ubercoova_settings() {
     '#default_value' => variable_get('ubercoova_rid', 0),
   );
 
+  $form['topup'] = array(
+    '#type' => 'fieldset',
+    '#title' => 'Top up Settings',
+    '#collapsible' => TRUE,
+    '#description' => t('These settings affect the bandwidth top-up menu links.'),
+  );
+
+  // Links for the topup menu item.
+  $form['topup']['ubercoova_topup_anonymous'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Anonymous User',
+    '#description' => t('Enter a menu title for the bandwidth top-up link displayed to anonymous users. These users will be required to login prior to seeing the list of products.'),
+    '#default_value' => variable_get('ubercoova_topup_anonymous', 'Login and top up my bandwidth'),
+  );
+  $form['topup']['ubercoova_topup_authenticated'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Authenticated User',
+    '#description' => t('Enter a menu title for the bandwidth top-up link displayed to authenticated users.'),
+    '#default_value' => variable_get('ubercoova_topup_anonymous', 'Top up my bandwidth'),
+  );
+
+
   $form['email'] = array(
     '#type' => 'fieldset',
     '#title' => 'Email Settings',
@@ -229,5 +251,13 @@ function ubercoova_settings_validate(&$form, &$form_state) {
 
   if (!empty($form_state['values']['ubercoova_radclient']) && !file_exists($form_state['values']['ubercoova_radclient'])) {
     form_set_error('ubercoova_radclient', t('The radclient binary does not exist in this location'));
+  }
+
+  if (empty($form_state['values']['ubercoova_topup_anonymous'])) {
+    form_set_error('ubercoova_topup_anonymous', t('The anonymous menu link must have a title.'));
+  }
+
+  if (empty($form_state['values']['ubercoova_topup_authenticated'])) {
+    form_set_error('ubercoova_topup_anonymous', t('The authenticated menu link must have a title.'));
   }
 }

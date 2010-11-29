@@ -22,8 +22,8 @@ function ubercoova_menu() {
     'file' => 'includes/ubercoova.admin.inc',
     'type' => MENU_NORMAL_ITEM,
   );
-  $items['user/%user/sessions'] = array(
-    'title' => 'Sessions',
+  $items['user/%user/ubercoova'] = array(
+    'title' => 'Hotspot',
     'description' => 'List recent sessions',
     'page callback' => 'ubercoova_user_sessions',
     'page arguments' => array(1),
@@ -39,23 +39,66 @@ function ubercoova_menu() {
     'access arguments' => array('administer ubercoova'),
     'type' => MENU_NORMAL_ITEM,
   );
-  $items['admin/user/ubercoova/disconnect/%user'] = array(
+  $items['user/%user/ubercoova/disconnect'] = array(
     'title' => 'Disconnect',
     'description' => 'Disconnect user',
     'page callback' => 'ubercoova_user_disconnect',
-    'page arguments' => array(4),
-    'access callback' => 'user_access',
-    'access arguments' => array('disconnect hotspot users'),
+    'page arguments' => array(1),
+    'access callback' => 'ubercoova_user_access',
+    'access arguments' => array('disconnect all hotspot sessions', 'disconnect own hotspot session'),
     'type' => MENU_CALLBACK,
   );
+  $items['ubercoova'] = array(
+    'title' => 'Top up my bandwidth',
+    'title callback' => 'ubercoova_products_redirect_title',
+    'description' => 'View a list of bandwidth products.',
+    'page callback' => 'ubercoova_products_redirect',
+    'access callback' => 'user_access',
+    'access arguments' => array('access content'),
+    'type' => MENU_NORMAL_ITEM,
+
+  );
   return $items;
+}
+
+/**
+ * Access check helper for the disconnect handler. This one can handle
+ * multiple permissions and does an OR on them.
+ */
+function ubercoova_user_access($perms) {
+  foreach ($perms as $perm) {
+    if (user_access($perm)) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Helper to create a title for the top-up menu link.
+ */
+function ubercoova_products_redirect_title() {
+  if (user_is_anonymous()) {
+    return variable_get('ubercoova_topup_anonymous', 'Login and top up my bandwidth');
+  }
+  return variable_get('ubercoova_topup_authenticated', 'Top up my bandwidth');
+}
+
+/**
+ * Helper to redirect a user to either the products page or a login form.
+ */
+function ubercoova_products_redirect() {
+  if (user_is_anonymous()) {
+    drupal_goto('user', 'destination=products');
+  }
+  drupal_goto('products');
 }
 
 /**
  * Implementation of hook_perm()
  */
 function ubercoova_perm() {
-  return array('administer ubercoova', 'edit user quota', 'disconnect hotspot users');
+  return array('administer ubercoova', 'edit user quota', 'disconnect all hotspot sessions', 'disconnect own hotspot session');
 }
 
 /**
@@ -283,10 +326,10 @@ function ubercoova_user_hotspot_panel($account) {
     $link = array(
       '#title' => t('Online'),
       '#type' => 'user_profile_item',
-      '#value' => t('User is online via NAS %nasname. !disconnect',
+      '#value' => t('Online via NAS %nasname. !disconnect',
         array(
           '%nasname' => $row['nasname'],
-          '!disconnect' => l('Disconnect', 'admin/user/ubercoova/disconnect/' . $account->uid)
+          '!disconnect' => l('Disconnect', 'user/' . $account->uid . '/ubercoova/disconnect')
         )),
       );
   }
@@ -294,7 +337,7 @@ function ubercoova_user_hotspot_panel($account) {
     $link = array(
       '#title' => t('Offline'),
       '#type' => 'user_profile_item',
-      '#value' => t('User is not online.'),
+      '#value' => t('Not online.'),
     );
   }
 
@@ -319,9 +362,12 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
         // Show the remaining quota.
         $account->content['quota'] = ubercoova_user_quota_panel($account);
 
-        // If user is online, add a way to KICK them.
-        if (($user->uid && ($user->uid == $account->uid) || user_access('disconnect hotspot users')) && variable_get('ubercoova_radclient', '')) {
-          $account->content['hotspot'] = ubercoova_user_hotspot_panel($account);
+        // If user is online, add a way to KICK them, but only if the radclient binary path is set.
+        if (variable_get('ubercoova_radclient', '')) {
+          if ( ($user->uid && ($user->uid == $account->uid && user_access('disconnect own hotspot session')))
+               || user_access('disconnect all hotspot sessions') && variable_get('ubercoova_radclient', '')) {
+            $account->content['hotspot'] = ubercoova_user_hotspot_panel($account);
+          }
         }
       }
 
@@ -626,11 +672,15 @@ function ubercoova_user_disconnect_form($form_state, $account, $session) {
     '#value' => $account->name,
   );
 
+  // Look pretty when the user disconnects itself.
+  global $user;
+  $name = ($account->uid == $user->uid) ? t('yourself') : $account->name;
+
   return confirm_form(
     $form,
-    t('Disconnect !user', array('!user' => $account->name)),
+    t('Hotspot Disconnect'),
     $form['#redirect'],
-    t('Do you really want disconnect !user from the internet? This will terminate all their transfers immediately.', array('!user' => $account->name)),
+    t('Do you really want disconnect @name from the internet? This will terminate all transfers immediately.', array('@name' => $name)),
     t('Disconnect'),
     t('Do not disconnect')
   );
@@ -729,7 +779,7 @@ function ubercoova_sessions() {
   }
 
   if (empty($rows)) {
-    return t('There are no active sessions.');
+    return t('There are no active hotspot sessions.');
   }
 
   $output  = theme('table', $header, $rows);

@@ -44,6 +44,8 @@ function ubercoova_uninstall() {
   variable_del('ubercoova_radclient');
   variable_del('ubercoova_cleanup');
   variable_del('ubercoova_cleanup_tables');
+  variable_del('ubercoova_topup_anonymous');
+  variable_del('ubercoova_topup_authenticated');
 }
 
 /**
