@@ -331,8 +331,10 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
 
     // Check if the user being saved has a changed status. If so, also change status in RADIUS.
     // By doing this here and not in a form handler, it'll work even with advuser etc.
+    // Some variables don't get set if it is a user modifying their e.g. email address so need
+    // to check that variables exist
     case 'update':
-      if ($edit['status'] != $account->status) {
+      if (isset($edit['status']) && $edit['status'] != $account->status) {
         ubercoova_toggle_user_status($account, $edit['status']);
       }
       break;
