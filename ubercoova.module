@@ -707,7 +707,7 @@ function ubercoova_user_disconnect_form_submit($form, &$form_state) {
 
   // Re-do this query here, so the secret is never exposed in a page source. Ever.
   db_set_active('radius');
-  $result = db_query("SELECT n.nasname AS nasname, n.secret AS secret FROM nas AS n LEFT JOIN nasmap AS nm USING (nasname) INNER JOIN radacct r USING(nasipaddress) WHERE r.username = '%s' AND r.acctstoptime IS NULL", $account->name);
+  $result = db_query("SELECT n.nasname AS nasname, n.secret AS secret FROM nas AS n LEFT JOIN nasmap AS nm USING (nasname) INNER JOIN radacct r USING(nasipaddress) WHERE r.username = '%s' AND r.acctstoptime IS NULL", $form_state['values']['username']);
   $row = db_fetch_array($result);
   db_set_active();
 
@@ -737,13 +737,19 @@ function ubercoova_user_disconnect_form_submit($form, &$form_state) {
 
   $return = proc_close($proc);
 
-  if (!empty($output)) {
-    drupal_set_message($output);
-  }
 
   if (!empty($errors)) {
     drupal_set_message(t('Unable to disconnect user %user', array('%user' => $form_state['values']['username'])), 'error');
     drupal_set_message($errors, 'error');
+  }
+  else {
+    if (!empty($output)) {
+      drupal_set_message(t('%user was disconnected.', array('%user' => $form_state['values']['username'])));
+      drupal_set_message(t('radclient: ') . $output);
+    }
+    else {
+      drupal_set_message(t('Received no output from %radclient.', array('%radclient' => $radclient)), 'warning');
+    }
   }
 
   drupal_goto('user/' . $form_state['values']['uid']);
