@@ -659,7 +659,7 @@ function ubercoova_user_disconnect($account) {
  *
  * @param $form_state
  * @param $account
- *   A valid suer object.
+ *   A valid user object.
  * @param $session
  *   A keyed array containing coova session information.
  */
@@ -667,14 +667,6 @@ function ubercoova_user_disconnect_form($form_state, $account, $session) {
   $form = array();
 
   $form['#redirect'] = 'user/' . $account->uid;
-  $form['nasname'] = array(
-    '#type' => 'hidden',
-    '#value' => $session['nasname'],
-  );
-  $form['secret'] = array(
-    '#type' => 'hidden',
-    '#value' => $session['secret'],
-  );
   $form['uid'] = array(
     '#type' => 'hidden',
     '#value' => $account->uid,
@@ -713,7 +705,19 @@ function ubercoova_user_disconnect_form_submit($form, &$form_state) {
     return;
   }
 
-  $command = $radclient . ' ' . $form_state['values']['nasname'] . ':3799 disconnect "' . $form_state['values']['secret'] . '"';
+  // Re-do this query here, so the secret is never exposed in a page source. Ever.
+  db_set_active('radius');
+  $result = db_query("SELECT n.nasname AS nasname, n.secret AS secret FROM nas AS n LEFT JOIN nasmap AS nm USING (nasname) INNER JOIN radacct r USING(nasipaddress) WHERE r.username = '%s' AND r.acctstoptime IS NULL", $account->name);
+  $row = db_fetch_array($result);
+  db_set_active();
+
+  // Re-check if the user is still in fact online.
+  if (empty($row)) {
+    drupal_set_message(t('User is not online.'), 'error');
+    drupal_goto('user/' . $form_state['values']['uid']);
+  }
+
+  $command = $radclient . ' ' . $row['nasname'] . ':3799 disconnect "' . $row['secret'] . '"';
 
   $descriptors = array(
     0 => array('pipe', 'r'), // stdin
