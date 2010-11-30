@@ -44,8 +44,8 @@ function ubercoova_menu() {
     'description' => 'Disconnect user',
     'page callback' => 'ubercoova_user_disconnect',
     'page arguments' => array(1),
-    'access callback' => 'ubercoova_user_access',
-    'access arguments' => array('disconnect all hotspot sessions', 'disconnect own hotspot session'),
+    'access callback' => 'ubercoova_user_disconnect_access',
+    'access arguments' => array(1),
     'type' => MENU_CALLBACK,
   );
   $items['ubercoova'] = array(
@@ -62,20 +62,27 @@ function ubercoova_menu() {
 }
 
 /**
- * Access check helper for the disconnect handler. This one can handle
- * multiple permissions and does an OR on them.
+ * Access check helper for the disconnect handler.
+ *
+ * @param $account
+ *   A valid user object representing the user to be disconnected.
+ * @return
+ *   A boolean TRUe or FALSE
  */
-function ubercoova_user_access($perms) {
-  foreach ($perms as $perm) {
-    if (user_access($perm)) {
-      return TRUE;
-    }
+function ubercoova_user_disconnect_access($account) {
+  global $user;
+  if ( ($user->uid == $account->uid && user_access('disconnect own hotspot session'))
+       || user_access('disconnect all hotspot sessions')) {
+    return TRUE;
   }
   return FALSE;
 }
 
 /**
  * Helper to create a title for the top-up menu link.
+ *
+ * @return string
+ *   A string to be used as menu title.
  */
 function ubercoova_products_redirect_title() {
   if (user_is_anonymous()) {
@@ -629,10 +636,8 @@ function ubercoova_user_disconnect($account) {
 
   // Do an extra permission check so users can't just enter the magic URL and kick users off.
   // Early return on fail.
-  global $user;
-  if ( !($user->uid == $account->uid && user_access('disconnect own hotspot session'))
-       || !user_access('disconnect all hotspot sessions')) {
-    return;
+  if (!ubercoova_user_disconnect_access($account)) {
+    return drupal_access_denied();
   }
 
   // Check if the user is online.
@@ -647,7 +652,6 @@ function ubercoova_user_disconnect($account) {
 
   // Generate a form and allow a confirm_form yes/no response.
   return drupal_get_form('ubercoova_user_disconnect_form', $account, $row);
-
 }
 
 /**
