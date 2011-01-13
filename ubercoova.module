@@ -36,7 +36,7 @@ function ubercoova_menu() {
     'description' => 'List current hotspot sessions',
     'page callback' => 'ubercoova_sessions',
     'access callback' => 'user_access',
-    'access arguments' => array('administer ubercoova'),
+    'access arguments' => array('disconnect all hotspot sessions'),
     'type' => MENU_NORMAL_ITEM,
   );
   $items['user/%user/ubercoova/disconnect'] = array(
