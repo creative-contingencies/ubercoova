@@ -164,6 +164,16 @@ function ubercoova_settings() {
     '#description' => t('These settings affect the bandwidth top-up menu links.'),
   );
 
+  $form['topup']['ubercoova_price_gb'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Price',
+    '#size' => 6,
+    '#description' => t('Price per GiB of quota. This is used when topping up an amount of money via the administration screen, not to calculate prices in the shop.'),
+    '#default_value' => variable_get('ubercoova_price_gb', ''),
+    '#field_prefix' => t('$'),
+    '#field_suffix' => t('per GiB'),
+  );
+
   // Links for the topup menu item.
   $form['topup']['ubercoova_topup_anonymous'] = array(
     '#type' => 'textfield',
@@ -259,5 +269,12 @@ function ubercoova_settings_validate(&$form, &$form_state) {
 
   if (empty($form_state['values']['ubercoova_topup_authenticated'])) {
     form_set_error('ubercoova_topup_anonymous', t('The authenticated menu link must have a title.'));
+  }
+
+  if (empty($form_state['values']['ubercoova_price_gb'])) {
+    form_set_error('ubercoova_price_gb', t('Please enter a price per GB'));
+  }
+  else if (!floatval($form_state['values']['ubercoova_price_gb'])) {
+    form_set_error('ubercoova_price_gb', t('Please enter a valid price per GB'));
   }
 }

@@ -105,7 +105,13 @@ function ubercoova_products_redirect() {
  * Implementation of hook_perm()
  */
 function ubercoova_perm() {
-  return array('administer ubercoova', 'edit user quota', 'disconnect all hotspot sessions', 'disconnect own hotspot session');
+  return array(
+    'administer ubercoova',
+    'view user password',
+    'edit user quota',
+    'disconnect all hotspot sessions',
+    'disconnect own hotspot session'
+  );
 }
 
 /**
@@ -129,12 +135,120 @@ function ubercoova_form_alter(&$form, $form_state, $form_id) {
         $form['account']['mail']['#disabled'] = TRUE;
         $form['account']['mail']['#type'] = 'hidden';
       }
+
+      // If the 
+      if (user_access('edit user quota')) {
+        $form['ubercoova'] = array(
+          '#type' => 'fieldset',
+          '#title' => t('Download Quota'),
+          '#description' => t('Set new download quota either in megabytes or by specifying a credit amount. If you specify both, the MB value will be used.'),
+          '#collapsible' => TRUE,
+          '#collapsed' => FALSE,
+        );
+        $form['ubercoova']['quota_new'] = array(
+          '#type' => 'checkbox',
+          '#values' => array(0, 1),
+          '#default_value' => 0,
+          '#title' => t('Set new download quota'),
+          '#description' => t('Check this box to replace the user\'s current download quota with the values specified below.'),
+        );
+        $form['ubercoova']['quota_mib'] = array(
+          '#type' => 'textfield',
+          '#title' => t('Set Download Quota'),
+          '#description' => t('Set new download quota in megabytes. One gigabyte is ' . UBERCOOVA_KILOBYTE . ' megabytes.'),
+          '#size' => 8,
+          '#field_suffix' => t('MB'),
+        );
+        $form['ubercoova']['quota_credit'] = array(
+          '#type' => 'textfield',
+          '#title' => t('Set Download Credit'),
+          '#description' => t('Set new download quota by dollar value. The configured price is $ @amount per GB.', array('@amount' => variable_get('ubercoova_price_gb', 0.00))),
+          '#size' => 6,
+          '#field_prefix' => t('$'),
+        );
+
+        // Add some handlers.
+        $form['#validate'][] = 'ubercoova_profile_form_quota_validate';
+        $form['#submit'][] = 'ubercoova_profile_form_quota_submit';
+      }
+
       // Append our own submit handler.
       $form['#submit'] = is_array($form['#submit']) ? $form['#submit'] : array();
       // Our submit function must run first or the user's account status will
       // get updated first and then our check if their status is changing fails
       array_unshift($form['#submit'], 'ubercoova_profile_form_submit');
       break;
+  }
+}
+
+/**
+ * Validate quota top-up from the user edit page.
+ */
+function ubercoova_profile_form_quota_validate($form, &$form_state) {
+  if (!empty($form_state['values']['quota_new'])) {
+    // Button checked but no values.
+    if (empty($form_state['values']['quota_mib']) && empty($form_state['values']['quota_credit'])) {
+      form_set_error('ubercoova][quota_mib', '');
+      form_set_error('ubercoova][quota_credit', '');
+      form_set_error('ubercoova][quota_new', t('Please enter a valid quota or credit value'));
+    }
+    // Invalid value in MB.
+    if (!empty($form_state['values']['quota_mib']) && !floatval($form_state['values']['quota_mib'])) {
+      form_set_error('ubercoova][quota_mib', t('Please enter a valid quota in MB'));
+    }
+    // Invalid monetary value.
+    if (!empty($form_state['values']['quota_credit']) && !floatval($form_state['values']['quota_credit'])) {
+      form_set_error('ubercoova][quota_credit', t('Please enter a valid credit value'));
+    }
+    // Value in both fields.
+    if (!empty($form_state['values']['quota_credit']) && !empty($form_state['values']['quota_mib'])) {
+      form_set_error('ubercoova][quota_credit', '');
+      form_set_error('ubercoova][quota_mib', t('Please enter <em>only</em> a megabyte or monetary value, not both'));
+    }
+  }
+  // Value but no check box.
+  else if (!empty($form_state['values']['quota_mib']) || !empty($form_state['values']['quota_credit'])) {
+    form_set_error('ubercoova][quota_new', t('Please confirm that you wish to set a new quota for this user'));
+  }
+}
+
+/**
+ * Save the quota topup from the user edit page.
+ */
+function ubercoova_profile_form_quota_submit($form, &$form_state) {
+  if (!empty($form_state['values']['quota_new'])) {
+    // Find out what the new total quota is...
+    $quota = floatval($form_state['values']['quota_mib']);
+    // ... in bytes.
+    $quota *= pow(UBERCOOVA_KILOBYTE, 2);
+
+    // If a monetary value was entered ...
+    $value = floatval($form_state['values']['quota_credit']) / (float)variable_get('ubercoova_price_gb', 0);
+    $quota += $value * pow(UBERCOOVA_KILOBYTE, 3);
+
+    // Load vars from the default database.
+    $table = variable_get('ubercoova_table', '');
+    $attribute = variable_get('ubercoova_attribute_quota', '');
+
+    $account = user_load(array('name' => $form_state['values']['name']));
+
+    // Set the new quota.
+    db_set_active('radius');
+    db_query("UPDATE %s SET value = %f WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $quota, $account->name, $attribute);
+    db_set_active();
+
+    // Watchdog log it, so if there is fail we can check.
+    watchdog('ubercoova', 'Changed the quota for !account to !quota', array('!account' => $form_state['values']['name'], '!quota' => format_size($quota)), WATCHDOG_INFO, NULL);
+
+    // Switch to the victim and also watchdog the change.
+    global $user;
+    $save_user = $user;
+    $user = $account;
+
+    watchdog('ubercoova', 'An administrator set quota to !quota', array('!quota' => format_size($quota)), WATCHDOG_INFO, NULL);
+
+    // Switch back to the active user.
+    $user = $save_user;
   }
 }
 
@@ -289,6 +403,7 @@ function ubercoova_user_quota_panel($account) {
   $table = variable_get('ubercoova_table', '');
   $table_acct = variable_get('ubercoova_table_accounting', '');
   $field_acct = variable_get('ubercoova_field_accounting', '');
+  $rate = floatval(variable_get('ubercoova_price_gb', ''));
 
   db_set_active('radius');
   $quota = db_result(db_query("SELECT value FROM " . $table . " WHERE username = '%s' and attribute = '%s' AND op = ':='", $account->name, $attribute));
@@ -296,19 +411,34 @@ function ubercoova_user_quota_panel($account) {
   db_set_active();
 
   if ($quota < $traffic) {
-    $quota_rem = 0;
+    $quota = 0;
   } else {
-    $quota_rem = $quota - $traffic;
+    $quota -= $traffic;
   }
+
+  $value = (float) $rate * $quota / pow(UBERCOOVA_KILOBYTE, 3);
 
   return array(
     '#type' => 'user_profile_category',
     '#weight' => -6,
     '#title' => t('Quota'),
-    'link' => array(
+    'quota' => array(
       '#title' => t('Remaining'),
       '#type' => 'user_profile_item',
-      '#value' => theme('user_quota', $quota, $quota_rem),
+      '#value' => theme('user_quota', $quota),
+      '#weight' => 0,
+    ),
+    'traffic' => array(
+      '#title' => t('Used'),
+      '#type' => 'user_profile_item',
+      '#value' => theme('user_quota', $value),
+      '#weight' => 1,
+    ),
+    'value' => array(
+      '#title' => t('Value'),
+      '#type' => 'user_profile_item',
+      '#value' => theme('user_quota_value', $value),
+      '#weight' => 3,
     ),
   );
 }
@@ -605,7 +735,10 @@ function ubercoova_login_form_validate($form, &$form_state) {
 function ubercoova_theme() {
   return array(
     'user_quota' => array(
-      'arguments' => array($quota => 0),
+      'arguments' => array($size => 0),
+    ),
+    'user_quota_value' => array(
+      'arguments' => array($amount => 0.00),
     ),
   );
 }
@@ -615,19 +748,35 @@ function ubercoova_theme() {
  *
  * @param $quota
  *   The raw value from the DB query, could be a bool.
- * @param $quota_rem
- *   A quota in bytes.
  * @return
  *   A translated themed string.
  */
-function theme_user_quota($quota, $quota_rem) {
-  if ($quota === FALSE) {
+function theme_user_quota($size) {
+  if ($size === FALSE) {
     return t("You either don't have an Internet access account, or you have a post paid account. To have an account created speak to staff at your College.");
   }
   else {
-    return t('@quota_rem.', array('@quota_rem' => ubercoova_format_size($quota_rem)));
+    return t('@size', array('@size' => ubercoova_format_size($size)));
   }
 }
+
+/**
+ * Theme function to display the dollar value of the quota on the /user/% page.
+ *
+ * @param $amount
+ *   The calculated dollar value from the DB query.
+ * @return
+ *   A translated themed string.
+ */
+function theme_user_quota_value($amount) {
+  if ($amount === FALSE) {
+    return t("You either don't have an Internet access account, or you have a post paid account.");
+  }
+  else {
+    return t('$ @amount', array('@amount' => number_format($amount, 2)));
+  }
+}
+
 
 /**
  * Callback to help disconnect a user's hotspot session.
