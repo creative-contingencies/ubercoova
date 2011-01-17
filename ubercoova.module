@@ -129,48 +129,15 @@ function ubercoova_form_alter(&$form, $form_state, $form_id) {
       array_unshift($form['#validate'], 'ubercoova_user_login_validate');
       break;
 
+    case 'user_register':
+      // Hack the form up a bit in helper functions.
+      ubercoova_register_form_edit($form);
+      ubercoova_profile_form_edit($form);
+      break;
+
     case 'user_profile_form':
-      // Hide the email field if the user isn't an administrator and email modification is disabled.
-      if (!variable_get('ubercoova_email_modify', 0) && !user_access('administer users')) {
-        $form['account']['mail']['#disabled'] = TRUE;
-        $form['account']['mail']['#type'] = 'hidden';
-      }
-
-      // If the 
-      if (user_access('edit user quota')) {
-        $form['ubercoova'] = array(
-          '#type' => 'fieldset',
-          '#title' => t('Download Quota'),
-          '#description' => t('Set new download quota either in megabytes or by specifying a credit amount. If you specify both, the MB value will be used.'),
-          '#collapsible' => TRUE,
-          '#collapsed' => FALSE,
-        );
-        $form['ubercoova']['quota_new'] = array(
-          '#type' => 'checkbox',
-          '#values' => array(0, 1),
-          '#default_value' => 0,
-          '#title' => t('Set new download quota'),
-          '#description' => t('Check this box to replace the user\'s current download quota with the values specified below.'),
-        );
-        $form['ubercoova']['quota_mib'] = array(
-          '#type' => 'textfield',
-          '#title' => t('Set Download Quota'),
-          '#description' => t('Set new download quota in megabytes. One gigabyte is ' . UBERCOOVA_KILOBYTE . ' megabytes.'),
-          '#size' => 8,
-          '#field_suffix' => t('MB'),
-        );
-        $form['ubercoova']['quota_credit'] = array(
-          '#type' => 'textfield',
-          '#title' => t('Set Download Credit'),
-          '#description' => t('Set new download quota by dollar value. The configured price is $ @amount per GB.', array('@amount' => variable_get('ubercoova_price_gb', 0.00))),
-          '#size' => 6,
-          '#field_prefix' => t('$'),
-        );
-
-        // Add some handlers.
-        $form['#validate'][] = 'ubercoova_profile_form_quota_validate';
-        $form['#submit'][] = 'ubercoova_profile_form_quota_submit';
-      }
+      // Hack the form up a bit in a helper function.
+      ubercoova_profile_form_edit($form);
 
       // Append our own submit handler.
       $form['#submit'] = is_array($form['#submit']) ? $form['#submit'] : array();
@@ -179,6 +146,114 @@ function ubercoova_form_alter(&$form, $form_state, $form_id) {
       array_unshift($form['#submit'], 'ubercoova_profile_form_submit');
       break;
   }
+}
+
+/**
+ * Helper that modifies the user/create form.
+ */
+function ubercoova_register_form_edit(&$form) {
+  if (!user_access('administer users'))
+    return;
+
+  // Override the definition of the email field.
+  $form['mail']['#description'] = t('If known, enter the new user\'s email address. Leave blank to generate an email address using the UberCoova module settings.');
+  $form['mail']['#required'] = FALSE;
+
+  // Override the definiton of the password field.
+  $form['pass']['#type'] = 'textfield';
+  $form['pass']['#title'] = t('Password');
+  $form['pass']['#description'] = t('Randomly generated password for the new account.');
+  $form['pass']['#default_value'] = user_password(10);
+
+  // Override the definition of the roles field.
+  $rid = variable_get('ubercoova_rid', 0);
+  if (!empty($rid)) {
+    $form['roles']['#default_value'] = array($rid);
+  }
+
+  // Override the definitioon of the notify field.
+  $form['notify']['#description'] = t('Do not check this box unless you have entered a valid email address for the new user.');
+
+  $form['#validate'] = is_array($form['#validate']) ? $form['#validate'] : array();
+  // Our validate function *MUST* run first.
+  array_unshift($form['#validate'], 'ubercoova_user_register_validate');
+  $form['#submit'][] = 'ubercoova_user_register_submit';
+
+}
+
+/**
+ * Helper that modifies the user/%/edit form.
+ */
+function ubercoova_profile_form_edit(&$form) {
+  // Hide the email field if the user isn't an administrator and email modification is disabled.
+  if (!variable_get('ubercoova_email_modify', 0) && !user_access('administer users')) {
+    $form['account']['mail']['#disabled'] = TRUE;
+    $form['account']['mail']['#type'] = 'hidden';
+  }
+
+  // If the user is allowed to override the quota, show the fieldset.
+  if (user_access('edit user quota')) {
+    $form['ubercoova'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Download Quota'),
+      '#description' => t('Set new download quota either in megabytes or by specifying a credit amount.'),
+      '#collapsible' => TRUE,
+      '#collapsed' => FALSE,
+    );
+    $form['ubercoova']['quota_new'] = array(
+      '#type' => 'checkbox',
+      '#values' => array(0, 1),
+      '#default_value' => 0,
+      '#title' => t('Set new download quota'),
+      '#description' => t('Check this box to set the user\'s download quota to the values specified below.'),
+    );
+    $form['ubercoova']['quota_mib'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Set Download Quota'),
+      '#description' => t('Set download quota in megabytes. One gigabyte is ' . UBERCOOVA_KILOBYTE . ' megabytes.'),
+      '#size' => 8,
+      '#field_suffix' => t('MB'),
+    );
+    $form['ubercoova']['quota_credit'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Set Download Credit'),
+      '#description' => t('Set download quota by dollar value. The configured price is $ @amount per GB.', array('@amount' => variable_get('ubercoova_price_gb', 0.00))),
+      '#size' => 6,
+      '#field_prefix' => t('$'),
+    );
+
+    // Add some handlers.
+    $form['#validate'][] = 'ubercoova_profile_form_quota_validate';
+    $form['#submit'][] = 'ubercoova_profile_form_quota_submit';
+  }
+}
+
+/**
+ * Validate handler for the user_register form.
+ */
+function ubercoova_user_register_validate($form, &$form_state) {
+  // Check if we are giving all RADIUS users the same email address
+  if ($mail_addr = variable_get('ubercoova_email_uname', '')) {
+    $mail_addr .= variable_get('ubercoova_email_domain', '');
+  } else {
+    $mail_addr = $form_state['values']['name'] . variable_get('ubercoova_email_domain', '');
+  }
+  $form_state['values']['mail'] = $mail_addr;
+}
+
+/**
+ * Submit handler for the user_register form.
+ *
+ * Basically, add the user to the RADIUS database.
+ */
+function ubercoova_user_register_submit($form, &$form_state) {
+  $table = variable_get('ubercoova_table', '');
+  $password_attribute = variable_get('ubercoova_attribute_password', '');
+
+  db_set_active('radius');
+  db_query("INSERT INTO %s (username, attribute, value, op) VALUES ('%s', '%s', '%s', ':=')", $table, $form_state['values']['name'], $password_attribute, $form_state['values']['pass']);
+  db_query("INSERT INTO %s (username, attribute, value, op) VALUES ('%s', 'Simultaneous-Use', '1', ':=')", $table, $form_state['values']['name']);
+  db_set_active();
 }
 
 /**
@@ -234,7 +309,7 @@ function ubercoova_profile_form_quota_submit($form, &$form_state) {
 
     // Set the new quota.
     db_set_active('radius');
-    db_query("UPDATE %s SET value = %f WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $quota, $account->name, $attribute);
+    db_query("REPLACE INTO %s (username, attribute, value, op) VALUES ('%s', '%s', %f, ':=')", $table, $account->name, $attribute, $quota);
     db_set_active();
 
     // Watchdog log it, so if there is fail we can check.
@@ -431,7 +506,7 @@ function ubercoova_user_quota_panel($account) {
     'traffic' => array(
       '#title' => t('Used'),
       '#type' => 'user_profile_item',
-      '#value' => theme('user_quota', $value),
+      '#value' => theme('user_quota', $traffic),
       '#weight' => 1,
     ),
     'value' => array(
@@ -754,6 +829,9 @@ function ubercoova_theme() {
 function theme_user_quota($size) {
   if ($size === FALSE) {
     return t("You either don't have an Internet access account, or you have a post paid account. To have an account created speak to staff at your College.");
+  }
+  if ($size == 0) {
+    return t('none');
   }
   else {
     return t('@size', array('@size' => ubercoova_format_size($size)));
