@@ -519,6 +519,32 @@ function ubercoova_user_quota_panel($account) {
 }
 
 /**
+ * Helper to show the cleartext password from the RADIUS db to an admin.
+ */
+function ubercoova_user_password_panel($account) {
+  // Grab some variables we need to query the radius database.
+  $table = variable_get('ubercoova_table', '');
+  $attribute = variable_get('ubercoova_attribute_password', '');
+
+  db_set_active('radius');
+  $row = db_result(db_query("SELECT value FROM %s WHERE LOWER(username) = LOWER('%s') AND attribute = '%s' AND op = ':='", $table, $account->name, $attribute));
+  db_set_active();
+
+  return array(
+    '#type' => 'user_profile_category',
+    '#weight' => 0,
+    '#title' => t('RADIUS'),
+    '#collapsible' => TRUE,
+    'value' => array(
+      '#title' => t('Password'),
+      '#type' => 'user_profile_item',
+      '#value' => ($row) ? $row : '- unset -',
+    ),
+  );
+  
+}
+
+/**
  * Helper to make a hotspot session status panel on the user profile page.
  *
  * @param $account.
@@ -581,6 +607,10 @@ function ubercoova_user($op, &$edit, &$account, $category = NULL) {
             $account->content['hotspot'] = ubercoova_user_hotspot_panel($account);
           }
         }
+      }
+      // If the user has permission, show the cleartext password.
+      if (user_access('view user password')) {
+        $account->content['password'] = ubercoova_user_password_panel($account);
       }
 
       // There is an orders tab, no need to duplicate this.
