@@ -491,7 +491,7 @@ function ubercoova_user_quota_panel($account) {
     $quota -= $traffic;
   }
 
-  $value = (float) $rate * $quota / pow(UBERCOOVA_KILOBYTE, 3);
+  $value = (float) $rate * $traffic / pow(UBERCOOVA_KILOBYTE, 3);
 
   return array(
     '#type' => 'user_profile_category',
@@ -510,7 +510,7 @@ function ubercoova_user_quota_panel($account) {
       '#weight' => 1,
     ),
     'value' => array(
-      '#title' => t('Value'),
+      '#title' => t('Used ($)'),
       '#type' => 'user_profile_item',
       '#value' => theme('user_quota_value', $value),
       '#weight' => 3,
