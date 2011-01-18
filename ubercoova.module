@@ -307,6 +307,9 @@ function ubercoova_profile_form_quota_submit($form, &$form_state) {
     $value = floatval($form_state['values']['quota_credit']) / (float)variable_get('ubercoova_price_gb', 0);
     $quota += $value * pow(UBERCOOVA_KILOBYTE, 3);
 
+    // Round the quota since we don't deal in bits
+    $quota = round($quota);
+
     // Load vars from the default database.
     $table = variable_get('ubercoova_table', '');
     $table_acct = variable_get('ubercoova_table_accounting', '');
