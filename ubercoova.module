@@ -309,6 +309,7 @@ function ubercoova_profile_form_quota_submit($form, &$form_state) {
 
     // Load vars from the default database.
     $table = variable_get('ubercoova_table', '');
+    $table_acct = variable_get('ubercoova_table_accounting', '');
     $attribute = variable_get('ubercoova_attribute_quota', '');
 
     $account = user_load(array('name' => $form_state['values']['name']));
@@ -316,16 +317,16 @@ function ubercoova_profile_form_quota_submit($form, &$form_state) {
     // Set the new quota.
     db_set_active('radius');
     // Find whatever has been used in the current session.
-    $used = db_result(db_query("SELECT SUM(acctinputoctets) FROM %s WHERE username = '%s'", $table, $account->name));
+    $used = db_result(db_query("SELECT SUM(acctinputoctets) FROM %s WHERE username = '%s'", $table_acct, $account->name));
 
     // Add this to the new quota, so on logout it shows the right value.
     $quota += $used;
     
     // First find out if a value exists, then either UPDATE or INSERT.
     // REPLACE INTO won't work because the username and attribute aren't indexed.
-    $radacctid = db_result(db_query("SELECT radacctid FROM %s WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $account->name, $attribute));
-    if (!empty($radacctid)) {
-      db_query("UPDATE %s SET value = %f WHERE radacctid = %d", $table, $quota, $radacctid);
+    $radcheckid = db_result(db_query("SELECT id FROM %s WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $account->name, $attribute));
+    if (!empty($radcheckid)) {
+      db_query("UPDATE %s SET value = %f WHERE id = %d", $table, $quota, $radcheckid);
     }
     else {
       db_query("INSERT INTO %s (username, attribute, value, op) VALUES ('%s', '%s', %f, ':=')", $table, $account->name, $attribute, $quota);
