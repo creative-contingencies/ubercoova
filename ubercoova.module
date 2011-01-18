@@ -308,8 +308,16 @@ function ubercoova_profile_form_quota_submit($form, &$form_state) {
     $account = user_load(array('name' => $form_state['values']['name']));
 
     // Set the new quota.
+    // First find out if a value exists, then either UPDATE or INSERT.
+    // REPLACE INTO won't work because the username and attribute aren't indexed.
     db_set_active('radius');
-    db_query("REPLACE INTO %s (username, attribute, value, op) VALUES ('%s', '%s', %f, ':=')", $table, $account->name, $attribute, $quota);
+    $radacctid = db_result(db_query("SELECT radacctid FROM %s WHERE username = '%s' AND attribute = '%s' AND op = ':='", $table, $account->name, $attribute));
+    if (!empty($radacctid)) {
+      db_query("UPDATE %s SET value = %f WHERE radacctid = %d", $table, $radacctid);
+    }
+    else {
+      db_query("INSERT INTO %s (username, attribute, value, op) VALUES ('%s', '%s', %f, ':=')", $table, $account->name, $attribute, $quota);
+    }
     db_set_active();
 
     // Watchdog log it, so if there is fail we can check.
