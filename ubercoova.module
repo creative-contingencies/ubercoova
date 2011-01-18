@@ -1148,7 +1148,7 @@ function ubercoova_user_sessions($account) {
  */
 function ubercoova_format_size($size, $langcode = NULL) {
   if ($size < UBERCOOVA_KILOBYTE) {
-    return format_plural($size, '1 byte', '@count bytes', array(), $langcode);
+    return format_plural((int)$size, '1 byte', '@count bytes', array(), $langcode);
   }
   else {
     $size = $size / UBERCOOVA_KILOBYTE; // Convert bytes to kilobytes.
