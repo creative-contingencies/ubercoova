@@ -247,13 +247,19 @@ function ubercoova_user_register_validate($form, &$form_state) {
  * Basically, add the user to the RADIUS database.
  */
 function ubercoova_user_register_submit($form, &$form_state) {
+
   $table = variable_get('ubercoova_table', '');
   $password_attribute = variable_get('ubercoova_attribute_password', '');
 
+  $account = user_load(array('name' => $form_state['values']['name']));
+
   db_set_active('radius');
-  db_query("INSERT INTO %s (username, attribute, value, op) VALUES ('%s', '%s', '%s', ':=')", $table, $form_state['values']['name'], $password_attribute, $form_state['values']['pass']);
-  db_query("INSERT INTO %s (username, attribute, value, op) VALUES ('%s', 'Simultaneous-Use', '1', ':=')", $table, $form_state['values']['name']);
+  db_query("INSERT INTO %s (username, attribute, value, op) VALUES ('%s', '%s', '%s', ':=')", $table, $account->name, $password_attribute, $form_state['values']['pass']);
+  db_query("INSERT INTO %s (username, attribute, value, op) VALUES ('%s', 'Simultaneous-Use', '1', ':=')", $table, $account->name);
   db_set_active();
+
+  // Set status as needed.
+  ubercoova_toggle_user_status($account, $form_state['values']['status']);
 }
 
 /**
